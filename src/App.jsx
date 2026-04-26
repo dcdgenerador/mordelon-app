@@ -79,28 +79,12 @@ const paletaToColors = (p) => {
 };
 
 // ─── DRAGGABLE TEXT ───────────────────────────────────────────────────────────
-function DraggableText({ text, fontSize, color, bold, pos, onMove, containerRef }) {
-  const elRef    = useRef();
-  const dragRef  = useRef(null); // { startClientX, startClientY, startPosX, startPosY }
+function DraggableText({ text, fontSize, color, bold, pos, onMove, containerRef, scaleRef }) {
+  const elRef   = useRef();
+  const dragRef = useRef(null);
 
   if (!text) return null;
 
-  // Calcula nueva posición a partir de un clientX/Y actual
-  const calcPos = (clientX, clientY) => {
-    const container = containerRef.current;
-    if (!container || !dragRef.current) return null;
-    const r = container.getBoundingClientRect();
-    const d = dragRef.current;
-    // Delta desde donde empezó el toque + posición original del texto
-    const x = d.startPosX + (clientX - d.startClientX);
-    const y = d.startPosY + (clientY - d.startClientY);
-    return {
-      x: Math.max(0, Math.min(r.width,  x)),
-      y: Math.max(0, Math.min(r.height, y)),
-    };
-  };
-
-  // ── Touch Events (Android Chrome, iOS Safari) ──
   const onTouchStart = (e) => {
     e.stopPropagation();
     const t = e.touches[0];
@@ -115,18 +99,26 @@ function DraggableText({ text, fontSize, color, bold, pos, onMove, containerRef 
 
   const onTouchMove = (e) => {
     if (!dragRef.current) return;
-    e.preventDefault(); // evita scroll de página
+    e.preventDefault();
     e.stopPropagation();
-    const t = e.touches[0];
-    const newPos = calcPos(t.clientX, t.clientY);
-    if (newPos) onMove(newPos);
+    const t  = e.touches[0];
+    const d  = dragRef.current;
+    const sc = scaleRef?.current ?? 1;
+    // Delta en px de pantalla → dividir por scale → px lógicos del canvas
+    const x  = d.startPosX + (t.clientX - d.startClientX) / sc;
+    const y  = d.startPosY + (t.clientY - d.startClientY) / sc;
+    const H  = containerRef.current?.offsetHeight ?? 640;
+    onMove({
+      x: Math.max(0, Math.min(PW, x)),
+      y: Math.max(0, Math.min(H,  y)),
+    });
   };
 
   const onTouchEnd = () => { dragRef.current = null; _touchDragging = false; };
 
-  // ── Pointer Events (mouse en desktop) ──
+  // Mouse desktop — sin escalado
   const onPointerDown = (e) => {
-    if (e.pointerType === "touch") return; // touch lo maneja Touch Events
+    if (e.pointerType === "touch") return;
     e.preventDefault();
     dragRef.current = {
       startClientX: e.clientX,
@@ -138,11 +130,17 @@ function DraggableText({ text, fontSize, color, bold, pos, onMove, containerRef 
   };
 
   const onPointerMove = (e) => {
-    if (e.pointerType === "touch") return;
-    if (!dragRef.current) return;
+    if (e.pointerType === "touch" || !dragRef.current) return;
     e.preventDefault();
-    const newPos = calcPos(e.clientX, e.clientY);
-    if (newPos) onMove(newPos);
+    const d = dragRef.current;
+    const r = containerRef.current?.getBoundingClientRect();
+    if (!r) return;
+    const x = d.startPosX + (e.clientX - d.startClientX);
+    const y = d.startPosY + (e.clientY - d.startClientY);
+    onMove({
+      x: Math.max(0, Math.min(r.width,  x)),
+      y: Math.max(0, Math.min(r.height, y)),
+    });
   };
 
   const onPointerUp = (e) => {
@@ -188,8 +186,99 @@ function DraggableText({ text, fontSize, color, bold, pos, onMove, containerRef 
   );
 }
 
+// ─── DRAGGABLE LOGO ──────────────────────────────────────────────────────────
+function DraggableLogo({ src, pos, size, onMove, containerRef, scaleRef }) {
+  const elRef   = useRef();
+  const dragRef = useRef(null);
+
+  const onTouchStart = (e) => {
+    e.stopPropagation();
+    const t = e.touches[0];
+    _touchDragging = true;
+    dragRef.current = {
+      startClientX: t.clientX,
+      startClientY: t.clientY,
+      startPosX: pos.x,
+      startPosY: pos.y,
+    };
+  };
+
+  const onTouchMove = (e) => {
+    if (!dragRef.current) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const t  = e.touches[0];
+    const d  = dragRef.current;
+    const sc = scaleRef?.current ?? 1;
+    const x  = d.startPosX + (t.clientX - d.startClientX) / sc;
+    const y  = d.startPosY + (t.clientY - d.startClientY) / sc;
+    const H  = containerRef.current?.offsetHeight ?? 640;
+    onMove({ x: Math.max(0, Math.min(PW, x)), y: Math.max(0, Math.min(H, y)) });
+  };
+
+  const onTouchEnd = () => { dragRef.current = null; _touchDragging = false; };
+
+  const onPointerDown = (e) => {
+    if (e.pointerType === "touch") return;
+    e.preventDefault();
+    dragRef.current = {
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      startPosX: pos.x,
+      startPosY: pos.y,
+    };
+    elRef.current?.setPointerCapture(e.pointerId);
+  };
+
+  const onPointerMove = (e) => {
+    if (e.pointerType === "touch" || !dragRef.current) return;
+    e.preventDefault();
+    const d = dragRef.current;
+    const r = containerRef.current?.getBoundingClientRect();
+    if (!r) return;
+    const x = d.startPosX + (e.clientX - d.startClientX);
+    const y = d.startPosY + (e.clientY - d.startClientY);
+    onMove({ x: Math.max(0, Math.min(r.width, x)), y: Math.max(0, Math.min(r.height, y)) });
+  };
+
+  const onPointerUp = (e) => {
+    if (e.pointerType === "touch") return;
+    dragRef.current = null;
+    elRef.current?.releasePointerCapture(e.pointerId);
+  };
+
+  return (
+    <img
+      ref={elRef}
+      src={src}
+      alt="logo"
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+      onTouchCancel={onTouchEnd}
+      style={{
+        position: "absolute",
+        left: pos.x,
+        top: pos.y,
+        transform: "translate(-50%, -50%)",
+        height: size,
+        objectFit: "contain",
+        cursor: "grab",
+        touchAction: "none",
+        userSelect: "none",
+        WebkitUserSelect: "none",
+        zIndex: 25,
+      }}
+    />
+  );
+}
+
 // ─── CANVAS PREVIEW ───────────────────────────────────────────────────────────
-function CanvasPreview({ form, image, logo, format, darkness, showIng, showValido, paleta, previewRef, sizes, positions, setPositions, textColors }) {
+function CanvasPreview({ form, image, logo, format, darkness, showIng, showValido, paleta, previewRef, sizes, positions, setPositions, textColors, scaleRef, logoSize }) {
   const isStory = format === "story";
   const H       = isStory ? storyH() : postH();
   const pal     = PALETTES[paleta] || PALETTES.clasica;
@@ -221,6 +310,7 @@ function CanvasPreview({ form, image, logo, format, darkness, showIng, showValid
         pos={positions[id] || def[id]}
         onMove={move(id)}
         containerRef={previewRef}
+        scaleRef={scaleRef}
       />
     ) : null;
 
@@ -265,6 +355,7 @@ function CanvasPreview({ form, image, logo, format, darkness, showIng, showValid
           pos={positions["ing"+i] || { x: PW*0.3, y: (positions.ingredientes ? positions.ingredientes.y : def.ingredientes.y) + i*14 }}
           onMove={move("ing"+i)}
           containerRef={previewRef}
+          scaleRef={scaleRef}
         />
       ))}
 
@@ -276,16 +367,17 @@ function CanvasPreview({ form, image, logo, format, darkness, showIng, showValid
       {dt("footer2", "DEL FUEGO AL PAN", tc.footer2, false)}
 
       {logo && (
-        <img src={logo} alt="logo" style={{
-          position:"absolute", bottom:10, left:14,
-          height: isStory ? 30 : 22,
-          objectFit:"contain", pointerEvents:"none",
-        }} />
+        <DraggableLogo
+          src={logo}
+          pos={positions.logo || { x: 14, y: isStory ? 610 : 330 }}
+          size={logoSize}
+          onMove={move("logo")}
+          containerRef={previewRef}
+          scaleRef={scaleRef}
+        />
       )}
 
-      <div style={{ position:"absolute", top:5, right:7, fontSize:9, color:"rgba(255,255,255,0.28)", pointerEvents:"none", fontFamily:"sans-serif" }}>
-        arrastrar textos
-      </div>
+
     </div>
   );
 }
@@ -413,7 +505,7 @@ function Section({ title, children }) {
 }
 
 // ─── CONTROLS PANEL ───────────────────────────────────────────────────────────
-function ControlsPanel({ form, setForm, format, handleFormatChange, paleta, setPaleta, setTextColors, image, handleImage, logo, handleLogo, setLogo, darkness, setDarkness, showIng, setShowIng, showValido, setShowValido, sizes, setSizes, textColors, positions, setPositions, downloading, downloadHD }) {
+function ControlsPanel({ form, setForm, format, handleFormatChange, paleta, setPaleta, setTextColors, image, handleImage, logo, handleLogo, setLogo, darkness, setDarkness, showIng, setShowIng, showValido, setShowValido, sizes, setSizes, textColors, positions, setPositions, downloading, downloadHD, logoSize, setLogoSize }) {
   const currentPreset = PRESET_KEYS.find(k => JSON.stringify(PRESETS[k]) === JSON.stringify(form));
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
 
@@ -462,7 +554,20 @@ function ControlsPanel({ form, setForm, format, handleFormatChange, paleta, setP
       <Section title="Imágenes">
         <UploadBtn label={image ? "✅ Cambiar foto de fondo" : "📷 Subir foto de fondo"} onChange={handleImage} active={!!image} />
         <UploadBtn label={logo  ? "✅ Cambiar logo"          : "🏷 Subir logo (opcional)"} onChange={handleLogo}  active={!!logo} />
-        {logo && <button onClick={() => setLogo(null)} style={{ fontSize:11, color:"#e05050", background:"none", border:"none", cursor:"pointer", padding:0 }}>✕ Quitar logo</button>}
+        {logo && (
+          <div style={{ marginTop:8 }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:4 }}>
+              <span style={{ fontSize:11, color:"#666", letterSpacing:0.5, textTransform:"uppercase" }}>Tamaño logo</span>
+              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                <input type="range" min="20" max="160" step="2" value={logoSize}
+                  onChange={e => setLogoSize(parseInt(e.target.value))}
+                  style={{ width:80, accentColor:"#2AB7B7" }} />
+                <span style={{ fontSize:10, color:"#777", minWidth:30 }}>{logoSize}px</span>
+              </div>
+            </div>
+            <button onClick={() => setLogo(null)} style={{ fontSize:11, color:"#e05050", background:"none", border:"none", cursor:"pointer", padding:0 }}>✕ Quitar logo</button>
+          </div>
+        )}
       </Section>
 
       <Section title="Oscuridad de la foto">
@@ -523,22 +628,47 @@ function ControlsPanel({ form, setForm, format, handleFormatChange, paleta, setP
 }
 
 // ─── PREVIEW PANEL ────────────────────────────────────────────────────────────
-function PreviewPanel({ form, image, logo, format, darkness, showIng, showValido, paleta, previewRef, sizes, positions, setPositions, textColors }) {
+function PreviewPanel({ form, image, logo, format, darkness, showIng, showValido, paleta, previewRef, sizes, positions, setPositions, textColors, logoSize }) {
+  // Escala el preview para que entre en pantallas angostas SIN alterar las
+  // coordenadas internas del contenedor (pos.x/y siguen siendo px lógicos de 360px).
+  // Los eventos touch/pointer ven clientX/Y del viewport → hay que dividir por scale.
+  const wrapRef = useRef();
+  const [scale, setScale] = useState(1);
+  useEffect(() => {
+    const calc = () => {
+      if (!wrapRef.current) return;
+      const available = wrapRef.current.clientWidth - 32; // 16px padding c/lado
+      setScale(available < PW ? available / PW : 1);
+    };
+    calc();
+    window.addEventListener("resize", calc);
+    return () => window.removeEventListener("resize", calc);
+  }, []);
+
   return (
-    <div style={{
+    <div ref={wrapRef} style={{
       display:"flex", flexDirection:"column",
       alignItems:"center", justifyContent:"center",
-      padding:24, background:"#0a0a0a", minHeight:400, height:"100%",
+      padding:16, background:"#0a0a0a", minHeight:400, height:"100%",
+      width:"100%", boxSizing:"border-box",
     }}>
-      <CanvasPreview
+      {/* El wrapper con transform:scale achica visualmente pero no cambia el layout */}
+      <div style={{
+        transformOrigin: "top center",
+        transform: `scale(${scale})`,
+        marginBottom: scale < 1 ? `calc((${scale} - 1) * var(--preview-h, 640px))` : 0,
+      }}>
+        <CanvasPreview
         form={form} image={image} logo={logo}
         format={format} darkness={darkness}
         showIng={showIng} showValido={showValido}
         paleta={paleta} previewRef={previewRef}
         sizes={sizes} positions={positions} setPositions={setPositions}
-        textColors={textColors}
+        textColors={textColors} scaleRef={scale < 1 ? { current: scale } : { current: 1 }}
+        logoSize={logoSize}
       />
-      <p style={{ fontSize:10, color:"#444", letterSpacing:2, marginTop:12, fontFamily:"sans-serif" }}>
+      </div>
+      <p style={{ fontSize:10, color:"#444", letterSpacing:2, marginTop: scale < 1 ? `calc((${scale} - 1) * var(--preview-h, 640px) + 12px)` : 12, fontFamily:"sans-serif" }}>
         PREVIEW · {format === "story" ? "1080×1920" : "1080×1080"}
       </p>
     </div>
@@ -559,6 +689,7 @@ export default function App() {
   const [downloading, setDownloading] = useState(false);
   const [sizes, setSizes]             = useState({ ...DEFAULT_SIZES });
   const [positions, setPositions]     = useState(makeDefaultPos(true));
+  const [logoSize, setLogoSize]         = useState(40);
   const [textColors, setTextColors]   = useState(paletaToColors("clasica"));
 
   const previewRef = useRef();
@@ -598,6 +729,7 @@ export default function App() {
     showIng, setShowIng, showValido, setShowValido,
     sizes, setSizes, textColors,
     positions, setPositions,
+    logoSize, setLogoSize,
     downloading, downloadHD,
   };
 
@@ -605,6 +737,7 @@ export default function App() {
     form, image, logo, format, darkness,
     showIng, showValido, paleta, previewRef,
     sizes, positions, setPositions, textColors,
+    logoSize,
   };
 
   return (
