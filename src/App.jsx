@@ -128,9 +128,12 @@ function DraggableText({ id, text, fontSize, color, bold, pos, onMove, container
 
   /* ── TOUCH ── */
   const onTouchStart = (e) => {
+    e.preventDefault();   // evita scroll del viewport durante el arrastre
     e.stopPropagation();
     dragging.current = true;
     const t    = e.touches[0];
+    // Capturamos el rect UNA sola vez y lo reutilizamos en todo el gesto
+    // para que el scroll del panel no descalibre las coordenadas
     const rect = getContainerRect();
     if (!rect) return;
     offset.current = {
@@ -141,11 +144,10 @@ function DraggableText({ id, text, fontSize, color, bold, pos, onMove, container
     const onMove = (ev) => {
       if (!dragging.current) return;
       ev.preventDefault();
-      const r  = getContainerRect();
       const tt = ev.touches[0];
-      if (!r) return;
-      onMove2(tt.clientX - r.left - offset.current.x,
-              tt.clientY - r.top  - offset.current.y, r);
+      // Usamos el mismo rect fijo, no llamamos getContainerRect() de nuevo
+      onMove2(tt.clientX - rect.left - offset.current.x,
+              tt.clientY - rect.top  - offset.current.y, rect);
     };
     const onEnd = () => {
       dragging.current = false;
@@ -295,9 +297,6 @@ function CanvasPreview({ form, image, logo, format, darkness, showIng, showValid
 
 // ─── FIELD CON SLIDER ─────────────────────────────────────────────────────────
 function Field({ label, fieldKey, value, onChange, multiline, sizes, setSizes, textColors, setTextColors }) {
-  // Ref para evitar scroll al escribir en textarea
-  const taRef = useRef();
-
   const base = {
     width:"100%", boxSizing:"border-box",
     background:"#1a1a1a", border:"1px solid #2e2e2e",
@@ -341,19 +340,9 @@ function Field({ label, fieldKey, value, onChange, multiline, sizes, setSizes, t
 
       {multiline ? (
         <textarea
-          ref={taRef}
           rows={3}
           value={value}
-          onChange={e => {
-            // Guardar scroll actual del panel antes de actualizar
-            const panel = document.querySelector(".mob-ctrl, .desk-ctrl");
-            const scrollY = panel ? panel.scrollTop : 0;
-            onChange(e.target.value.toUpperCase());
-            // Restaurar scroll después del render
-            requestAnimationFrame(() => {
-              if (panel) panel.scrollTop = scrollY;
-            });
-          }}
+          onChange={e => onChange(e.target.value.toUpperCase())}
           style={{ ...base, resize:"vertical" }}
         />
       ) : (
@@ -622,13 +611,13 @@ export default function App() {
 
       <style>{`
         .mob-tabs{display:flex;}
-        .mob-ctrl{display:block;overflow-y:auto;max-height:calc(100vh - 108px);}
+        .mob-ctrl{display:block;overflow-y:auto;max-height:calc(100vh - 108px);overflow-anchor:none;}
         .mob-prev{display:none;}
         .desk{display:none;}
         @media(min-width:768px){
           .mob-tabs,.mob-ctrl,.mob-prev{display:none!important;}
           .desk{display:flex;height:calc(100vh - 57px);}
-          .desk-ctrl{width:420px;min-width:340px;overflow-y:auto;border-right:1px solid #1e1e1e;height:100%;}
+          .desk-ctrl{width:420px;min-width:340px;overflow-y:auto;border-right:1px solid #1e1e1e;height:100%;overflow-anchor:none;}
           .desk-prev{flex:1;display:flex;align-items:center;justify-content:center;background:#0a0a0a;}
         }
       `}</style>
