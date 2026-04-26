@@ -1,6 +1,9 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { toPng } from "html-to-image";
 
+// Flag global: true mientras hay un texto siendo arrastrado en touch
+let _touchDragging = false;
+
 // ─── PRESETS ──────────────────────────────────────────────────────────────────
 const PRESETS = {
   lunes:    { linea1:"LUNES EN",    linea2:"MORDELÓN", separador:"EL DÍA IDEAL PARA",    titulo:"UN SANGUCHE DE",  precio:"CARNE MECHADA", ingredientes:"", valido:"", cta1:"PORQUE EL LUNES", cta2:"SE BANCA CON",    cta3:"MORDELÓN." },
@@ -78,48 +81,74 @@ const paletaToColors = (p) => {
 // ─── DRAGGABLE TEXT ───────────────────────────────────────────────────────────
 function DraggableText({ text, fontSize, color, bold, pos, onMove, containerRef }) {
   const elRef    = useRef();
-  const stateRef = useRef(null); // { offsetX, offsetY, pointerId } mientras arrastra
+  const dragRef  = useRef(null); // { startClientX, startClientY, startPosX, startPosY }
 
   if (!text) return null;
 
-  const onPointerDown = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (stateRef.current) return;
-
+  // Calcula nueva posición a partir de un clientX/Y actual
+  const calcPos = (clientX, clientY) => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!container || !dragRef.current) return null;
     const r = container.getBoundingClientRect();
-
-    stateRef.current = {
-      pointerId: e.pointerId,
-      offsetX: e.clientX - r.left - pos.x,
-      offsetY: e.clientY - r.top  - pos.y,
+    const d = dragRef.current;
+    // Delta desde donde empezó el toque + posición original del texto
+    const x = d.startPosX + (clientX - d.startClientX);
+    const y = d.startPosY + (clientY - d.startClientY);
+    return {
+      x: Math.max(0, Math.min(r.width,  x)),
+      y: Math.max(0, Math.min(r.height, y)),
     };
+  };
 
+  // ── Touch Events (Android Chrome, iOS Safari) ──
+  const onTouchStart = (e) => {
+    e.stopPropagation();
+    const t = e.touches[0];
+    _touchDragging = true;
+    dragRef.current = {
+      startClientX: t.clientX,
+      startClientY: t.clientY,
+      startPosX: pos.x,
+      startPosY: pos.y,
+    };
+  };
+
+  const onTouchMove = (e) => {
+    if (!dragRef.current) return;
+    e.preventDefault(); // evita scroll de página
+    e.stopPropagation();
+    const t = e.touches[0];
+    const newPos = calcPos(t.clientX, t.clientY);
+    if (newPos) onMove(newPos);
+  };
+
+  const onTouchEnd = () => { dragRef.current = null; _touchDragging = false; };
+
+  // ── Pointer Events (mouse en desktop) ──
+  const onPointerDown = (e) => {
+    if (e.pointerType === "touch") return; // touch lo maneja Touch Events
+    e.preventDefault();
+    dragRef.current = {
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      startPosX: pos.x,
+      startPosY: pos.y,
+    };
     elRef.current?.setPointerCapture(e.pointerId);
   };
 
   const onPointerMove = (e) => {
-    const s = stateRef.current;
-    if (!s || e.pointerId !== s.pointerId) return;
+    if (e.pointerType === "touch") return;
+    if (!dragRef.current) return;
     e.preventDefault();
-
-    const container = containerRef.current;
-    if (!container) return;
-    const r = container.getBoundingClientRect();
-
-    onMove({
-      x: Math.max(0, Math.min(r.width,  e.clientX - r.left - s.offsetX)),
-      y: Math.max(0, Math.min(r.height, e.clientY - r.top  - s.offsetY)),
-    });
+    const newPos = calcPos(e.clientX, e.clientY);
+    if (newPos) onMove(newPos);
   };
 
   const onPointerUp = (e) => {
-    if (stateRef.current?.pointerId === e.pointerId) {
-      elRef.current?.releasePointerCapture(e.pointerId);
-      stateRef.current = null;
-    }
+    if (e.pointerType === "touch") return;
+    dragRef.current = null;
+    elRef.current?.releasePointerCapture(e.pointerId);
   };
 
   return (
@@ -129,6 +158,10 @@ function DraggableText({ text, fontSize, color, bold, pos, onMove, containerRef 
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+      onTouchCancel={onTouchEnd}
       style={{
         position: "absolute",
         left: pos.x, top: pos.y,
@@ -167,7 +200,8 @@ function CanvasPreview({ form, image, logo, format, darkness, showIng, showValid
   useEffect(() => {
     const el = previewRef.current;
     if (!el) return;
-    const block = (e) => { if (e.touches?.length === 1) e.preventDefault(); };
+    // Solo previene scroll si hay un texto siendo arrastrado
+    const block = (e) => { if (_touchDragging) e.preventDefault(); };
     el.addEventListener("touchmove", block, { passive: false });
     return () => el.removeEventListener("touchmove", block);
   }, [previewRef]);
