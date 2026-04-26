@@ -77,21 +77,23 @@ const paletaToColors = (p) => {
 
 // ─── DRAGGABLE TEXT ───────────────────────────────────────────────────────────
 function DraggableText({ text, fontSize, color, bold, pos, onMove, containerRef }) {
-  const elRef      = useRef();
-  const offsetRef  = useRef({ x: 0, y: 0 });
-  // Guardamos el rect en el pointerdown y NO lo volvemos a pedir
-  // Esto evita que coordenadas del visual viewport mobile rompan el arrastre
-  const rectRef    = useRef(null);
+  const elRef     = useRef();
+  const offsetRef = useRef({ x: 0, y: 0 });
+  const dragging  = useRef(false);
 
   if (!text) return null;
+
+  const getContainerRect = () => containerRef.current?.getBoundingClientRect() ?? null;
 
   const onPointerDown = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    const r = containerRef.current?.getBoundingClientRect();
+    const r = getContainerRect();
     if (!r) return;
-    rectRef.current = { left: r.left, top: r.top, width: r.width, height: r.height };
+    dragging.current = true;
     elRef.current.setPointerCapture(e.pointerId);
+    // offset = distancia entre donde hiciste click y el centro del texto,
+    // medida en coordenadas del contenedor
     offsetRef.current = {
       x: e.clientX - r.left - pos.x,
       y: e.clientY - r.top  - pos.y,
@@ -99,9 +101,10 @@ function DraggableText({ text, fontSize, color, bold, pos, onMove, containerRef 
   };
 
   const onPointerMove = (e) => {
-    if (!elRef.current?.hasPointerCapture(e.pointerId)) return;
+    if (!dragging.current || !elRef.current?.hasPointerCapture(e.pointerId)) return;
     e.preventDefault();
-    const r = rectRef.current;
+    // Rect fresco en cada move: compensa scroll y cualquier reflow del layout móvil
+    const r = getContainerRect();
     if (!r) return;
     onMove({
       x: Math.max(0, Math.min(r.width,  e.clientX - r.left - offsetRef.current.x)),
@@ -110,8 +113,8 @@ function DraggableText({ text, fontSize, color, bold, pos, onMove, containerRef 
   };
 
   const onPointerUp = (e) => {
+    dragging.current = false;
     elRef.current?.releasePointerCapture(e.pointerId);
-    rectRef.current = null;
   };
 
   return (
@@ -596,7 +599,7 @@ export default function App() {
       <div className="mob-ctrl" style={{ display: activeTab === "controles" ? "block" : "none" }}>
         <ControlsPanel {...sharedProps} />
       </div>
-      <div className="mob-prev" style={{ display: activeTab === "preview" ? "flex" : "none", justifyContent:"center", alignItems:"center", minHeight:"calc(100vh - 108px)", background:"#0a0a0a" }}>
+      <div className="mob-prev" style={{ display: activeTab === "preview" ? "flex" : "none", justifyContent:"center", alignItems:"center", minHeight:"calc(100vh - 108px)", background:"#0a0a0a", touchAction:"none" }}>
         <PreviewPanel {...previewProps} />
       </div>
 
