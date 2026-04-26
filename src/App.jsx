@@ -21,6 +21,41 @@ const PALETTES = {
   fuego:  { dorado:"#FF7800", fuego:"#C81E1E", gris:"#999", turquesa:"#2AB7B7" },
 };
 
+// Colores por defecto de texto (paleta clásica)
+const DEFAULT_TEXT_COLORS = {
+  linea1:      "#888888",
+  linea2:      "#2AB7B7",
+  separador:   "#bbbbbb",
+  titulo:      "#DC5014",
+  precio:      "#C8991A",
+  ingredientes:"#bbbbbb",
+  valido:      "#aaaaaa",
+  cta1:        "#ffffff",
+  cta2:        "#ffffff",
+  cta3:        "#2AB7B7",
+  footer1:     "#2AB7B7",
+  footer2:     "#888888",
+};
+
+// Genera textColors a partir de una paleta
+const paletaToColors = (p) => {
+  const pal = PALETTES[p] || PALETTES.clasica;
+  return {
+    linea1:      pal.gris,
+    linea2:      pal.turquesa,
+    separador:   "#bbbbbb",
+    titulo:      pal.fuego,
+    precio:      pal.dorado,
+    ingredientes:"#bbbbbb",
+    valido:      "#aaaaaa",
+    cta1:        "#ffffff",
+    cta2:        "#ffffff",
+    cta3:        pal.turquesa,
+    footer1:     pal.turquesa,
+    footer2:     pal.gris,
+  };
+};
+
 const PRESET_KEYS   = Object.keys(PRESETS);
 const PRESET_LABELS = { lunes:"Lunes", martes:"Martes", miercoles:"Miércoles", jueves:"Jueves", viernes:"Viernes", sabado:"Sábado", domingo:"Domingo", promo:"Promo", smash:"Smash", combo:"Combo" };
 
@@ -158,10 +193,11 @@ function DraggableText({ id, text, fontSize, color, bold, pos, onMove, container
 }
 
 // ─── CANVAS PREVIEW ───────────────────────────────────────────────────────────
-function CanvasPreview({ form, image, logo, format, darkness, showIng, showValido, paleta, previewRef, sizes, positions, setPositions }) {
+function CanvasPreview({ form, image, logo, format, darkness, showIng, showValido, paleta, previewRef, sizes, positions, setPositions, textColors }) {
   const isStory = format === "story";
   const H       = isStory ? storyH() : postH();
   const pal     = PALETTES[paleta] || PALETTES.clasica;
+  const tc      = textColors || DEFAULT_TEXT_COLORS;
 
   const ingredientes = form.ingredientes
     ? form.ingredientes.split("\n").map(s => s.trim()).filter(Boolean)
@@ -219,28 +255,28 @@ function CanvasPreview({ form, image, logo, format, darkness, showIng, showValid
       <div style={{ position:"absolute", left:"8%", right:"8%", top: isStory?"65%":"65%", height:1.5, background:pal.turquesa, pointerEvents:"none" }} />
 
       {/* Textos */}
-      {dt("linea1",    form.linea1,    pal.gris,     false)}
-      {dt("linea2",    form.linea2,    pal.turquesa, true)}
-      {dt("separador", form.separador, "#bbb",       false)}
-      {dt("titulo",    form.titulo,    pal.fuego,    true)}
-      {dt("precio",    form.precio,    pal.dorado,   true)}
+      {dt("linea1",    form.linea1,    tc.linea1,    false)}
+      {dt("linea2",    form.linea2,    tc.linea2,    true)}
+      {dt("separador", form.separador, tc.separador, false)}
+      {dt("titulo",    form.titulo,    tc.titulo,    true)}
+      {dt("precio",    form.precio,    tc.precio,    true)}
 
       {showIng && ingredientes.map((ing, i) => (
         <DraggableText key={`ing${i}`} id={`ing${i}`} text={ing}
           fontSize={`${sizes.ingredientes || DEFAULT_SIZES.ingredientes}px`}
-          color="#bbb" bold={false}
+          color={tc.ingredientes} bold={false}
           pos={positions[`ing${i}`] || { x: PW*0.3, y: (positions.ingredientes?.y || def.ingredientes.y) + i*14 }}
           onMove={move(`ing${i}`)}
           containerRef={previewRef}
         />
       ))}
 
-      {showValido && dt("valido",  form.valido, "#aaa",       false)}
-      {dt("cta1",    form.cta1,   "#fff",        true)}
-      {dt("cta2",    form.cta2,   "#fff",        true)}
-      {dt("cta3",    form.cta3,   pal.turquesa,  true)}
-      {dt("footer1", "MORDELÓN",         pal.turquesa, true)}
-      {dt("footer2", "DEL FUEGO AL PAN", pal.gris,     false)}
+      {showValido && dt("valido",  form.valido, tc.valido,  false)}
+      {dt("cta1",    form.cta1,   tc.cta1,     true)}
+      {dt("cta2",    form.cta2,   tc.cta2,     true)}
+      {dt("cta3",    form.cta3,   tc.cta3,     true)}
+      {dt("footer1", "MORDELÓN",         tc.footer1, true)}
+      {dt("footer2", "DEL FUEGO AL PAN", tc.footer2, false)}
 
       {logo && (
         <img src={logo} alt="logo" style={{
@@ -258,7 +294,7 @@ function CanvasPreview({ form, image, logo, format, darkness, showIng, showValid
 }
 
 // ─── FIELD CON SLIDER ─────────────────────────────────────────────────────────
-function Field({ label, fieldKey, value, onChange, multiline, sizes, setSizes }) {
+function Field({ label, fieldKey, value, onChange, multiline, sizes, setSizes, textColors, setTextColors }) {
   // Ref para evitar scroll al escribir en textarea
   const taRef = useRef();
 
@@ -277,6 +313,20 @@ function Field({ label, fieldKey, value, onChange, multiline, sizes, setSizes })
           {label}
         </label>
         <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+          {textColors && setTextColors && (
+            <input
+              type="color"
+              value={textColors[fieldKey] || "#ffffff"}
+              onChange={e => setTextColors(c => ({ ...c, [fieldKey]: e.target.value }))}
+              title="Color del texto"
+              style={{
+                width:24, height:24, padding:2,
+                border:"1px solid #333", borderRadius:4,
+                background:"#1a1a1a", cursor:"pointer",
+                flexShrink:0,
+              }}
+            />
+          )}
           <input
             type="range" min="6" max="60" step="1"
             value={sizes[fieldKey] || DEFAULT_SIZES[fieldKey] || 14}
@@ -397,6 +447,7 @@ export default function App() {
   const [downloading, setDownloading] = useState(false);
   const [sizes, setSizes]           = useState({ ...DEFAULT_SIZES });
   const [positions, setPositions]   = useState(makeDefaultPos(true));
+  const [textColors, setTextColors] = useState(paletaToColors("clasica"));
 
   const previewRef = useRef();
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
@@ -436,6 +487,7 @@ export default function App() {
     value: form[key],
     onChange: v => set(key, v),
     sizes, setSizes,
+    textColors, setTextColors,
   });
 
   const ControlsPanel = () => (
@@ -457,11 +509,19 @@ export default function App() {
       </Section>
 
       <Section title="Paleta de colores">
-        <div style={{ display:"flex", gap:8 }}>
+        <div style={{ display:"flex", gap:8, marginBottom:8 }}>
           {["clasica","noche","fuego"].map(p => (
-            <Btn key={p} label={p.charAt(0).toUpperCase()+p.slice(1)} active={paleta===p} onClick={()=>setPaleta(p)} />
+            <Btn key={p} label={p.charAt(0).toUpperCase()+p.slice(1)} active={paleta===p}
+              onClick={() => { setPaleta(p); setTextColors(paletaToColors(p)); }} />
           ))}
         </div>
+        <button onClick={() => setTextColors(paletaToColors(paleta))} style={{
+          width:"100%", padding:"7px 0",
+          background:"#1a1a1a", border:"1px solid #2e2e2e",
+          borderRadius:6, color:"#666", fontSize:11, cursor:"pointer", letterSpacing:1,
+        }}>
+          ↺ Resetear colores de texto
+        </button>
       </Section>
 
       <Section title="Imágenes">
@@ -538,6 +598,7 @@ export default function App() {
         showIng={showIng} showValido={showValido}
         paleta={paleta} previewRef={previewRef}
         sizes={sizes} positions={positions} setPositions={setPositions}
+        textColors={textColors}
       />
       <p style={{ fontSize:10, color:"#444", letterSpacing:2, marginTop:12, fontFamily:"sans-serif" }}>
         PREVIEW · {format==="story" ? "1080×1920" : "1080×1080"}
