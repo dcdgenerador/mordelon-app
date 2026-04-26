@@ -77,8 +77,11 @@ const paletaToColors = (p) => {
 
 // ─── DRAGGABLE TEXT ───────────────────────────────────────────────────────────
 function DraggableText({ text, fontSize, color, bold, pos, onMove, containerRef }) {
-  const elRef  = useRef();
-  const offset = useRef({ x: 0, y: 0 });
+  const elRef      = useRef();
+  const offsetRef  = useRef({ x: 0, y: 0 });
+  // Guardamos el rect en el pointerdown y NO lo volvemos a pedir
+  // Esto evita que coordenadas del visual viewport mobile rompan el arrastre
+  const rectRef    = useRef(null);
 
   if (!text) return null;
 
@@ -87,10 +90,9 @@ function DraggableText({ text, fontSize, color, bold, pos, onMove, containerRef 
     e.stopPropagation();
     const r = containerRef.current?.getBoundingClientRect();
     if (!r) return;
-    // setPointerCapture hace que todos los pointermove/up lleguen a este elemento
-    // aunque el dedo se salga, igual que hace Canva/Instagram
+    rectRef.current = { left: r.left, top: r.top, width: r.width, height: r.height };
     elRef.current.setPointerCapture(e.pointerId);
-    offset.current = {
+    offsetRef.current = {
       x: e.clientX - r.left - pos.x,
       y: e.clientY - r.top  - pos.y,
     };
@@ -99,16 +101,17 @@ function DraggableText({ text, fontSize, color, bold, pos, onMove, containerRef 
   const onPointerMove = (e) => {
     if (!elRef.current?.hasPointerCapture(e.pointerId)) return;
     e.preventDefault();
-    const r = containerRef.current?.getBoundingClientRect();
+    const r = rectRef.current;
     if (!r) return;
     onMove({
-      x: Math.max(0, Math.min(r.width,  e.clientX - r.left - offset.current.x)),
-      y: Math.max(0, Math.min(r.height, e.clientY - r.top  - offset.current.y)),
+      x: Math.max(0, Math.min(r.width,  e.clientX - r.left - offsetRef.current.x)),
+      y: Math.max(0, Math.min(r.height, e.clientY - r.top  - offsetRef.current.y)),
     });
   };
 
   const onPointerUp = (e) => {
     elRef.current?.releasePointerCapture(e.pointerId);
+    rectRef.current = null;
   };
 
   return (
