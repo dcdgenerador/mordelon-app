@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback } from "react";
 import { toPng } from "html-to-image";
 
 // ─── PRESETS ──────────────────────────────────────────────────────────────────
@@ -21,52 +21,15 @@ const PALETTES = {
   fuego:  { dorado:"#FF7800", fuego:"#C81E1E", gris:"#999", turquesa:"#2AB7B7" },
 };
 
-// Colores por defecto de texto (paleta clásica)
-const DEFAULT_TEXT_COLORS = {
-  linea1:      "#888888",
-  linea2:      "#2AB7B7",
-  separador:   "#bbbbbb",
-  titulo:      "#DC5014",
-  precio:      "#C8991A",
-  ingredientes:"#bbbbbb",
-  valido:      "#aaaaaa",
-  cta1:        "#ffffff",
-  cta2:        "#ffffff",
-  cta3:        "#2AB7B7",
-  footer1:     "#2AB7B7",
-  footer2:     "#888888",
-};
-
-// Genera textColors a partir de una paleta
-const paletaToColors = (p) => {
-  const pal = PALETTES[p] || PALETTES.clasica;
-  return {
-    linea1:      pal.gris,
-    linea2:      pal.turquesa,
-    separador:   "#bbbbbb",
-    titulo:      pal.fuego,
-    precio:      pal.dorado,
-    ingredientes:"#bbbbbb",
-    valido:      "#aaaaaa",
-    cta1:        "#ffffff",
-    cta2:        "#ffffff",
-    cta3:        pal.turquesa,
-    footer1:     pal.turquesa,
-    footer2:     pal.gris,
-  };
-};
-
 const PRESET_KEYS   = Object.keys(PRESETS);
 const PRESET_LABELS = { lunes:"Lunes", martes:"Martes", miercoles:"Miércoles", jueves:"Jueves", viernes:"Viernes", sabado:"Sábado", domingo:"Domingo", promo:"Promo", smash:"Smash", combo:"Combo" };
 
-// Preview size (pantalla)
 const PW = 360;
 const storyH = () => 640;
 const postH  = () => 360;
 
 const DEFAULT_SIZES = { linea1:13, linea2:36, separador:10, titulo:16, precio:24, ingredientes:9, valido:8, cta1:17, cta2:17, cta3:17 };
 
-// Posiciones por defecto en px, para story (640px alto)
 const makeDefaultPos = (isStory) => {
   const H = isStory ? 640 : 360;
   return {
@@ -85,106 +48,102 @@ const makeDefaultPos = (isStory) => {
   };
 };
 
+const paletaToColors = (p) => {
+  const pal = PALETTES[p] || PALETTES.clasica;
+  return {
+    linea1:      pal.gris,
+    linea2:      pal.turquesa,
+    separador:   "#bbbbbb",
+    titulo:      pal.fuego,
+    precio:      pal.dorado,
+    ingredientes:"#bbbbbb",
+    valido:      "#aaaaaa",
+    cta1:        "#ffffff",
+    cta2:        "#ffffff",
+    cta3:        pal.turquesa,
+    footer1:     pal.turquesa,
+    footer2:     pal.gris,
+  };
+};
+
 // ─── DRAGGABLE TEXT ───────────────────────────────────────────────────────────
-// Arrastre estilo Canva: el texto sigue exactamente al puntero/dedo
-function DraggableText({ id, text, fontSize, color, bold, pos, onMove, containerRef }) {
-  const ref       = useRef();
-  const dragging  = useRef(false);
-  // offset entre el click y el centro del elemento
-  const offset    = useRef({ x: 0, y: 0 });
+function DraggableText({ text, fontSize, color, bold, pos, onMove, containerRef }) {
+  const dragging = useRef(false);
+  const offset   = useRef({ x: 0, y: 0 });
 
   if (!text) return null;
 
-  const getContainerRect = () =>
-    containerRef.current ? containerRef.current.getBoundingClientRect() : null;
+  const getRect = () => containerRef.current ? containerRef.current.getBoundingClientRect() : null;
 
-  /* ── MOUSE ── */
+  const clamp = (nx, ny, r) => onMove({
+    x: Math.max(0, Math.min(r.width,  nx)),
+    y: Math.max(0, Math.min(r.height, ny)),
+  });
+
   const onMouseDown = (e) => {
     e.preventDefault();
     e.stopPropagation();
+    const r = getRect();
+    if (!r) return;
     dragging.current = true;
-    const rect = getContainerRect();
-    if (!rect) return;
-    offset.current = {
-      x: e.clientX - rect.left - pos.x,
-      y: e.clientY - rect.top  - pos.y,
-    };
+    offset.current = { x: e.clientX - r.left - pos.x, y: e.clientY - r.top - pos.y };
 
-    const onMove = (ev) => {
+    const move = (ev) => {
       if (!dragging.current) return;
-      const r = getContainerRect();
-      if (!r) return;
-      onMove2(ev.clientX - r.left - offset.current.x,
-              ev.clientY - r.top  - offset.current.y, r);
+      const r2 = getRect();
+      if (!r2) return;
+      clamp(ev.clientX - r2.left - offset.current.x, ev.clientY - r2.top - offset.current.y, r2);
     };
-    const onUp = () => {
+    const up = () => {
       dragging.current = false;
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup",   onUp);
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
     };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup",   onUp);
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
   };
 
-  /* ── TOUCH ── */
   const onTouchStart = (e) => {
-    e.preventDefault();   // evita scroll del viewport durante el arrastre
+    e.preventDefault();
     e.stopPropagation();
+    const r = getRect();
+    if (!r) return;
     dragging.current = true;
-    const t    = e.touches[0];
-    // Capturamos el rect UNA sola vez y lo reutilizamos en todo el gesto
-    // para que el scroll del panel no descalibre las coordenadas
-    const rect = getContainerRect();
-    if (!rect) return;
-    offset.current = {
-      x: t.clientX - rect.left - pos.x,
-      y: t.clientY - rect.top  - pos.y,
-    };
+    const t = e.touches[0];
+    offset.current = { x: t.clientX - r.left - pos.x, y: t.clientY - r.top - pos.y };
 
-    const onMove = (ev) => {
+    const move = (ev) => {
       if (!dragging.current) return;
       ev.preventDefault();
       const tt = ev.touches[0];
-      // Usamos el mismo rect fijo, no llamamos getContainerRect() de nuevo
-      onMove2(tt.clientX - rect.left - offset.current.x,
-              tt.clientY - rect.top  - offset.current.y, rect);
+      clamp(tt.clientX - r.left - offset.current.x, tt.clientY - r.top - offset.current.y, r);
     };
-    const onEnd = () => {
+    const end = () => {
       dragging.current = false;
-      window.removeEventListener("touchmove", onMove);
-      window.removeEventListener("touchend",  onEnd);
+      window.removeEventListener("touchmove", move);
+      window.removeEventListener("touchend", end);
     };
-    window.addEventListener("touchmove", onMove, { passive: false });
-    window.addEventListener("touchend",  onEnd);
-  };
-
-  const onMove2 = (nx, ny, rect) => {
-    onMove({
-      x: Math.max(0, Math.min(rect.width,  nx)),
-      y: Math.max(0, Math.min(rect.height, ny)),
-    });
+    window.addEventListener("touchmove", move, { passive: false });
+    window.addEventListener("touchend", end);
   };
 
   return (
     <div
-      ref={ref}
       onMouseDown={onMouseDown}
       onTouchStart={onTouchStart}
       style={{
-        position:   "absolute",
-        left:       pos.x,
-        top:        pos.y,
-        transform:  "translate(-50%, -50%)",
-        cursor:     "grab",
+        position: "absolute",
+        left: pos.x, top: pos.y,
+        transform: "translate(-50%, -50%)",
+        cursor: "grab",
         userSelect: "none",
         whiteSpace: "nowrap",
-        color,
-        fontSize,
+        color, fontSize,
         fontWeight: bold ? 900 : 400,
         fontFamily: "'Arial Black', Impact, sans-serif",
         letterSpacing: 1,
         textShadow: "0 1px 6px rgba(0,0,0,0.85)",
-        touchAction:"none",
+        touchAction: "none",
         zIndex: 20,
         lineHeight: 1.2,
       }}
@@ -199,20 +158,18 @@ function CanvasPreview({ form, image, logo, format, darkness, showIng, showValid
   const isStory = format === "story";
   const H       = isStory ? storyH() : postH();
   const pal     = PALETTES[paleta] || PALETTES.clasica;
-  const tc      = textColors || DEFAULT_TEXT_COLORS;
+  const tc      = textColors || paletaToColors("clasica");
 
   const ingredientes = form.ingredientes
     ? form.ingredientes.split("\n").map(s => s.trim()).filter(Boolean)
     : [];
 
-  const move = (id) => (newPos) =>
-    setPositions(p => ({ ...p, [id]: newPos }));
-
-  const def = makeDefaultPos(isStory);
+  const move = (id) => (newPos) => setPositions(p => ({ ...p, [id]: newPos }));
+  const def  = makeDefaultPos(isStory);
 
   const dt = (id, text, color, bold) =>
     text ? (
-      <DraggableText key={id} id={id} text={text}
+      <DraggableText key={id} text={text}
         fontSize={`${sizes[id] || DEFAULT_SIZES[id] || 14}px`}
         color={color} bold={bold}
         pos={positions[id] || def[id]}
@@ -229,11 +186,9 @@ function CanvasPreview({ form, image, logo, format, darkness, showIng, showValid
         position: "relative", overflow: "hidden",
         borderRadius: 8, flexShrink: 0,
         background: "#111",
-        // Evita scroll en touch mientras arrastrás dentro del preview
         touchAction: "none",
       }}
     >
-      {/* Foto de fondo */}
       {image && (
         <img src={image} alt="" style={{
           position:"absolute", inset:0,
@@ -243,20 +198,14 @@ function CanvasPreview({ form, image, logo, format, darkness, showIng, showValid
         }} />
       )}
 
-      {/* Oscuridad */}
       <div style={{ position:"absolute", inset:0, background:`rgba(0,0,0,${darkness})`, pointerEvents:"none" }} />
-      {/* Gradientes */}
       <div style={{ position:"absolute", top:0,    left:0, right:0, height:"45%", background:"linear-gradient(to bottom,rgba(0,0,0,0.55),transparent)", pointerEvents:"none" }} />
       <div style={{ position:"absolute", bottom:0, left:0, right:0, height:"45%", background:"linear-gradient(to top,rgba(0,0,0,0.65),transparent)",    pointerEvents:"none" }} />
 
-      {/* Barra turquesa */}
       <div style={{ position:"absolute", left:18, top:28, width:3, height:isStory?82:55, background:pal.turquesa, borderRadius:2, pointerEvents:"none" }} />
+      <div style={{ position:"absolute", left:"8%", right:"8%", top:"29%", height:1.5, background:pal.dorado,   pointerEvents:"none" }} />
+      <div style={{ position:"absolute", left:"8%", right:"8%", top:"65%", height:1.5, background:pal.turquesa, pointerEvents:"none" }} />
 
-      {/* Líneas decorativas */}
-      <div style={{ position:"absolute", left:"8%", right:"8%", top: isStory?"29%":"29%", height:1.5, background:pal.dorado,   pointerEvents:"none" }} />
-      <div style={{ position:"absolute", left:"8%", right:"8%", top: isStory?"65%":"65%", height:1.5, background:pal.turquesa, pointerEvents:"none" }} />
-
-      {/* Textos */}
       {dt("linea1",    form.linea1,    tc.linea1,    false)}
       {dt("linea2",    form.linea2,    tc.linea2,    true)}
       {dt("separador", form.separador, tc.separador, false)}
@@ -264,11 +213,11 @@ function CanvasPreview({ form, image, logo, format, darkness, showIng, showValid
       {dt("precio",    form.precio,    tc.precio,    true)}
 
       {showIng && ingredientes.map((ing, i) => (
-        <DraggableText key={`ing${i}`} id={`ing${i}`} text={ing}
+        <DraggableText key={"ing"+i} text={ing}
           fontSize={`${sizes.ingredientes || DEFAULT_SIZES.ingredientes}px`}
           color={tc.ingredientes} bold={false}
-          pos={positions[`ing${i}`] || { x: PW*0.3, y: (positions.ingredientes?.y || def.ingredientes.y) + i*14 }}
-          onMove={move(`ing${i}`)}
+          pos={positions["ing"+i] || { x: PW*0.3, y: (positions.ingredientes ? positions.ingredientes.y : def.ingredientes.y) + i*14 }}
+          onMove={move("ing"+i)}
           containerRef={previewRef}
         />
       ))}
@@ -289,13 +238,13 @@ function CanvasPreview({ form, image, logo, format, darkness, showIng, showValid
       )}
 
       <div style={{ position:"absolute", top:5, right:7, fontSize:9, color:"rgba(255,255,255,0.28)", pointerEvents:"none", fontFamily:"sans-serif" }}>
-        ✥ arrastrá los textos
+        arrastrar textos
       </div>
     </div>
   );
 }
 
-// ─── FIELD CON SLIDER ─────────────────────────────────────────────────────────
+// ─── FIELD ────────────────────────────────────────────────────────────────────
 function Field({ label, fieldKey, value, onChange, multiline, sizes, setSizes, textColors, setTextColors }) {
   const base = {
     width:"100%", boxSizing:"border-box",
@@ -318,12 +267,7 @@ function Field({ label, fieldKey, value, onChange, multiline, sizes, setSizes, t
               value={textColors[fieldKey] || "#ffffff"}
               onChange={e => setTextColors(c => ({ ...c, [fieldKey]: e.target.value }))}
               title="Color del texto"
-              style={{
-                width:24, height:24, padding:2,
-                border:"1px solid #333", borderRadius:4,
-                background:"#1a1a1a", cursor:"pointer",
-                flexShrink:0,
-              }}
+              style={{ width:24, height:24, padding:2, border:"1px solid #333", borderRadius:4, background:"#1a1a1a", cursor:"pointer", flexShrink:0 }}
             />
           )}
           <input
@@ -422,85 +366,41 @@ function Section({ title, children }) {
   );
 }
 
-// ─── APP ──────────────────────────────────────────────────────────────────────
-export default function App() {
-  const [form, setForm]             = useState(PRESETS.viernes);
-  const [image, setImage]           = useState(null);
-  const [logo, setLogo]             = useState(null);
-  const [format, setFormat]         = useState("story");
-  const [darkness, setDarkness]     = useState(0.45);
-  const [showIng, setShowIng]       = useState(true);
-  const [showValido, setShowValido] = useState(true);
-  const [paleta, setPaleta]         = useState("clasica");
-  const [activeTab, setActiveTab]   = useState("controles");
-  const [downloading, setDownloading] = useState(false);
-  const [sizes, setSizes]           = useState({ ...DEFAULT_SIZES });
-  const [positions, setPositions]   = useState(makeDefaultPos(true));
-  const [textColors, setTextColors] = useState(paletaToColors("clasica"));
-
-  const previewRef = useRef();
+// ─── CONTROLS PANEL ───────────────────────────────────────────────────────────
+function ControlsPanel({ form, setForm, format, handleFormatChange, paleta, setPaleta, setTextColors, image, handleImage, logo, handleLogo, setLogo, darkness, setDarkness, showIng, setShowIng, showValido, setShowValido, sizes, setSizes, textColors, positions, setPositions, downloading, downloadHD }) {
+  const currentPreset = PRESET_KEYS.find(k => JSON.stringify(PRESETS[k]) === JSON.stringify(form));
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
 
-  // Recalcular posiciones cuando cambia el formato
-  const handleFormatChange = (f) => {
-    setFormat(f);
-    setPositions(makeDefaultPos(f === "story"));
-  };
-
-  const currentPreset = PRESET_KEYS.find(k => JSON.stringify(PRESETS[k]) === JSON.stringify(form));
-
-  const handleImage = (e) => { const f = e.target.files[0]; if (f) setImage(URL.createObjectURL(f)); };
-  const handleLogo  = (e) => { const f = e.target.files[0]; if (f) setLogo(URL.createObjectURL(f)); };
-
-  const downloadHD = useCallback(async () => {
-    if (!previewRef.current) return;
-    setDownloading(true);
-    try {
-      const isStory = format === "story";
-      const dataUrl = await toPng(previewRef.current, {
-        canvasWidth:  PW * 3,
-        canvasHeight: (isStory ? storyH() : postH()) * 3,
-        pixelRatio: 3,
-      });
-      const a = document.createElement("a");
-      a.download = `mordelon-${format}-${Date.now()}.png`;
-      a.href = dataUrl;
-      a.click();
-    } finally {
-      setDownloading(false);
-    }
-  }, [format]);
-
   const fp = (label, key, multiline) => ({
-    label, fieldKey:key, multiline,
+    label, fieldKey: key, multiline,
     value: form[key],
     onChange: v => set(key, v),
     sizes, setSizes,
     textColors, setTextColors,
   });
 
-  const ControlsPanel = () => (
+  return (
     <div style={{ padding:"16px 16px 40px" }}>
       <Section title="Preset">
         <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
           {PRESET_KEYS.map(k => (
-            <Chip key={k} label={PRESET_LABELS[k]} active={currentPreset===k}
-              onClick={() => { setForm(PRESETS[k]); setPositions(makeDefaultPos(format==="story")); }} />
+            <Chip key={k} label={PRESET_LABELS[k]} active={currentPreset === k}
+              onClick={() => { setForm(PRESETS[k]); setPositions(makeDefaultPos(format === "story")); }} />
           ))}
         </div>
       </Section>
 
       <Section title="Formato">
         <div style={{ display:"flex", gap:8 }}>
-          <Btn label="📱 Story" active={format==="story"} onClick={() => handleFormatChange("story")} />
-          <Btn label="🖼 Post"  active={format==="post"}  onClick={() => handleFormatChange("post")} />
+          <Btn label="📱 Story" active={format === "story"} onClick={() => handleFormatChange("story")} />
+          <Btn label="🖼 Post"  active={format === "post"}  onClick={() => handleFormatChange("post")} />
         </div>
       </Section>
 
       <Section title="Paleta de colores">
         <div style={{ display:"flex", gap:8, marginBottom:8 }}>
           {["clasica","noche","fuego"].map(p => (
-            <Btn key={p} label={p.charAt(0).toUpperCase()+p.slice(1)} active={paleta===p}
+            <Btn key={p} label={p.charAt(0).toUpperCase()+p.slice(1)} active={paleta === p}
               onClick={() => { setPaleta(p); setTextColors(paletaToColors(p)); }} />
           ))}
         </div>
@@ -549,7 +449,7 @@ export default function App() {
       </Section>
 
       <Section title="Posiciones">
-        <button onClick={() => setPositions(makeDefaultPos(format==="story"))} style={{
+        <button onClick={() => setPositions(makeDefaultPos(format === "story"))} style={{
           width:"100%", padding:"8px 0",
           background:"#1a1a1a", border:"1px solid #333",
           borderRadius:6, color:"#777", fontSize:12, cursor:"pointer",
@@ -574,8 +474,11 @@ export default function App() {
       </button>
     </div>
   );
+}
 
-  const PreviewPanel = () => (
+// ─── PREVIEW PANEL ────────────────────────────────────────────────────────────
+function PreviewPanel({ form, image, logo, format, darkness, showIng, showValido, paleta, previewRef, sizes, positions, setPositions, textColors }) {
+  return (
     <div style={{
       display:"flex", flexDirection:"column",
       alignItems:"center", justifyContent:"center",
@@ -590,15 +493,77 @@ export default function App() {
         textColors={textColors}
       />
       <p style={{ fontSize:10, color:"#444", letterSpacing:2, marginTop:12, fontFamily:"sans-serif" }}>
-        PREVIEW · {format==="story" ? "1080×1920" : "1080×1080"}
+        PREVIEW · {format === "story" ? "1080×1920" : "1080×1080"}
       </p>
     </div>
   );
+}
+
+// ─── APP ──────────────────────────────────────────────────────────────────────
+export default function App() {
+  const [form, setForm]               = useState(PRESETS.viernes);
+  const [image, setImage]             = useState(null);
+  const [logo, setLogo]               = useState(null);
+  const [format, setFormat]           = useState("story");
+  const [darkness, setDarkness]       = useState(0.45);
+  const [showIng, setShowIng]         = useState(true);
+  const [showValido, setShowValido]   = useState(true);
+  const [paleta, setPaleta]           = useState("clasica");
+  const [activeTab, setActiveTab]     = useState("controles");
+  const [downloading, setDownloading] = useState(false);
+  const [sizes, setSizes]             = useState({ ...DEFAULT_SIZES });
+  const [positions, setPositions]     = useState(makeDefaultPos(true));
+  const [textColors, setTextColors]   = useState(paletaToColors("clasica"));
+
+  const previewRef = useRef();
+
+  const handleFormatChange = (f) => {
+    setFormat(f);
+    setPositions(makeDefaultPos(f === "story"));
+  };
+
+  const handleImage = (e) => { const f = e.target.files[0]; if (f) setImage(URL.createObjectURL(f)); };
+  const handleLogo  = (e) => { const f = e.target.files[0]; if (f) setLogo(URL.createObjectURL(f)); };
+
+  const downloadHD = useCallback(async () => {
+    if (!previewRef.current) return;
+    setDownloading(true);
+    try {
+      const isStory = format === "story";
+      const dataUrl = await toPng(previewRef.current, {
+        canvasWidth:  PW * 3,
+        canvasHeight: (isStory ? storyH() : postH()) * 3,
+        pixelRatio: 3,
+      });
+      const a = document.createElement("a");
+      a.download = `mordelon-${format}-${Date.now()}.png`;
+      a.href = dataUrl;
+      a.click();
+    } finally {
+      setDownloading(false);
+    }
+  }, [format]);
+
+  const sharedProps = {
+    form, setForm, format, handleFormatChange,
+    paleta, setPaleta, setTextColors,
+    image, handleImage, logo, handleLogo, setLogo,
+    darkness, setDarkness,
+    showIng, setShowIng, showValido, setShowValido,
+    sizes, setSizes, textColors,
+    positions, setPositions,
+    downloading, downloadHD,
+  };
+
+  const previewProps = {
+    form, image, logo, format, darkness,
+    showIng, showValido, paleta, previewRef,
+    sizes, positions, setPositions, textColors,
+  };
 
   return (
     <div style={{ minHeight:"100vh", background:"#0e0e0e", color:"#eee" }}>
 
-      {/* Header */}
       <div style={{ background:"#141414", borderBottom:"1px solid #222", padding:"12px 20px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
         <div>
           <div style={{ fontSize:20, fontWeight:900, color:"#2AB7B7", letterSpacing:1, fontFamily:"'Arial Black',sans-serif" }}>MORDELÓN</div>
@@ -610,47 +575,46 @@ export default function App() {
       </div>
 
       <style>{`
-        .mob-tabs{display:flex;}
-        .mob-ctrl{display:block;overflow-y:auto;max-height:calc(100vh - 108px);overflow-anchor:none;}
-        .mob-prev{display:none;}
-        .desk{display:none;}
+        .mob-tabs { display:flex; }
+        .mob-ctrl { display:block; overflow-y:auto; max-height:calc(100vh - 108px); overflow-anchor:none; }
+        .mob-prev { display:none; }
+        .desk     { display:none; }
         @media(min-width:768px){
-          .mob-tabs,.mob-ctrl,.mob-prev{display:none!important;}
-          .desk{display:flex;height:calc(100vh - 57px);}
-          .desk-ctrl{width:420px;min-width:340px;overflow-y:auto;border-right:1px solid #1e1e1e;height:100%;overflow-anchor:none;}
-          .desk-prev{flex:1;display:flex;align-items:center;justify-content:center;background:#0a0a0a;}
+          .mob-tabs,.mob-ctrl,.mob-prev { display:none!important; }
+          .desk      { display:flex; height:calc(100vh - 57px); }
+          .desk-ctrl { width:420px; min-width:340px; overflow-y:auto; border-right:1px solid #1e1e1e; height:100%; overflow-anchor:none; }
+          .desk-prev { flex:1; display:flex; align-items:center; justify-content:center; background:#0a0a0a; }
         }
       `}</style>
 
-      {/* MOBILE tabs */}
-      <div className="mob-tabs" style={{ display:"flex", borderBottom:"1px solid #1e1e1e", background:"#141414" }}>
+      <div className="mob-tabs" style={{ borderBottom:"1px solid #1e1e1e", background:"#141414" }}>
         {["controles","preview"].map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)} style={{
             flex:1, padding:"11px 0", fontSize:13,
-            fontWeight: activeTab===tab ? 700 : 400,
-            color: activeTab===tab ? "#2AB7B7" : "#555",
+            fontWeight: activeTab === tab ? 700 : 400,
+            color: activeTab === tab ? "#2AB7B7" : "#555",
             background:"none", border:"none",
             borderBottomWidth:2, borderBottomStyle:"solid",
-            borderBottomColor: activeTab===tab ? "#2AB7B7" : "transparent",
+            borderBottomColor: activeTab === tab ? "#2AB7B7" : "transparent",
             cursor:"pointer",
           }}>
-            {tab==="controles" ? "Controles" : "Preview"}
+            {tab === "controles" ? "Controles" : "Preview"}
           </button>
         ))}
       </div>
 
-      <div className="mob-ctrl" style={{ display: activeTab==="controles" ? "block" : "none" }}>
-        <ControlsPanel />
+      <div className="mob-ctrl" style={{ display: activeTab === "controles" ? "block" : "none" }}>
+        <ControlsPanel {...sharedProps} />
       </div>
-      <div className="mob-prev" style={{ display: activeTab==="preview" ? "flex" : "none", justifyContent:"center", alignItems:"center", minHeight:"calc(100vh - 108px)", background:"#0a0a0a" }}>
-        <PreviewPanel />
+      <div className="mob-prev" style={{ display: activeTab === "preview" ? "flex" : "none", justifyContent:"center", alignItems:"center", minHeight:"calc(100vh - 108px)", background:"#0a0a0a" }}>
+        <PreviewPanel {...previewProps} />
       </div>
 
-      {/* DESKTOP */}
       <div className="desk">
-        <div className="desk-ctrl"><ControlsPanel /></div>
-        <div className="desk-prev"><PreviewPanel /></div>
+        <div className="desk-ctrl"><ControlsPanel {...sharedProps} /></div>
+        <div className="desk-prev"><PreviewPanel {...previewProps} /></div>
       </div>
+
     </div>
   );
 }
