@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { toPng } from "html-to-image";
 
 // ─── PRESETS ──────────────────────────────────────────────────────────────────
@@ -77,44 +77,49 @@ const paletaToColors = (p) => {
 
 // ─── DRAGGABLE TEXT ───────────────────────────────────────────────────────────
 function DraggableText({ text, fontSize, color, bold, pos, onMove, containerRef }) {
-  const elRef     = useRef();
-  const offsetRef = useRef({ x: 0, y: 0 });
-  const dragging  = useRef(false);
+  const elRef    = useRef();
+  const stateRef = useRef(null); // { offsetX, offsetY, pointerId } mientras arrastra
 
   if (!text) return null;
-
-  const getContainerRect = () => containerRef.current?.getBoundingClientRect() ?? null;
 
   const onPointerDown = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    const r = getContainerRect();
-    if (!r) return;
-    dragging.current = true;
-    elRef.current.setPointerCapture(e.pointerId);
-    // offset = distancia entre donde hiciste click y el centro del texto,
-    // medida en coordenadas del contenedor
-    offsetRef.current = {
-      x: e.clientX - r.left - pos.x,
-      y: e.clientY - r.top  - pos.y,
+    if (stateRef.current) return;
+
+    const container = containerRef.current;
+    if (!container) return;
+    const r = container.getBoundingClientRect();
+
+    stateRef.current = {
+      pointerId: e.pointerId,
+      offsetX: e.clientX - r.left - pos.x,
+      offsetY: e.clientY - r.top  - pos.y,
     };
+
+    elRef.current?.setPointerCapture(e.pointerId);
   };
 
   const onPointerMove = (e) => {
-    if (!dragging.current || !elRef.current?.hasPointerCapture(e.pointerId)) return;
+    const s = stateRef.current;
+    if (!s || e.pointerId !== s.pointerId) return;
     e.preventDefault();
-    // Rect fresco en cada move: compensa scroll y cualquier reflow del layout móvil
-    const r = getContainerRect();
-    if (!r) return;
+
+    const container = containerRef.current;
+    if (!container) return;
+    const r = container.getBoundingClientRect();
+
     onMove({
-      x: Math.max(0, Math.min(r.width,  e.clientX - r.left - offsetRef.current.x)),
-      y: Math.max(0, Math.min(r.height, e.clientY - r.top  - offsetRef.current.y)),
+      x: Math.max(0, Math.min(r.width,  e.clientX - r.left - s.offsetX)),
+      y: Math.max(0, Math.min(r.height, e.clientY - r.top  - s.offsetY)),
     });
   };
 
   const onPointerUp = (e) => {
-    dragging.current = false;
-    elRef.current?.releasePointerCapture(e.pointerId);
+    if (stateRef.current?.pointerId === e.pointerId) {
+      elRef.current?.releasePointerCapture(e.pointerId);
+      stateRef.current = null;
+    }
   };
 
   return (
@@ -130,6 +135,7 @@ function DraggableText({ text, fontSize, color, bold, pos, onMove, containerRef 
         transform: "translate(-50%, -50%)",
         cursor: "grab",
         userSelect: "none",
+        WebkitUserSelect: "none",
         whiteSpace: "nowrap",
         color, fontSize,
         fontWeight: bold ? 900 : 400,
@@ -137,8 +143,11 @@ function DraggableText({ text, fontSize, color, bold, pos, onMove, containerRef 
         letterSpacing: 1,
         textShadow: "0 1px 6px rgba(0,0,0,0.85)",
         touchAction: "none",
+        WebkitTouchCallout: "none",
         zIndex: 20,
         lineHeight: 1.2,
+        padding: "8px",
+        margin: "-8px",
       }}
     >
       {text}
@@ -152,6 +161,16 @@ function CanvasPreview({ form, image, logo, format, darkness, showIng, showValid
   const H       = isStory ? storyH() : postH();
   const pal     = PALETTES[paleta] || PALETTES.clasica;
   const tc      = textColors || paletaToColors("clasica");
+
+  // iOS Safari: los eventos React son pasivos y no pueden hacer preventDefault.
+  // Bloqueamos touchmove nativo con passive:false para evitar scroll durante arrastre.
+  useEffect(() => {
+    const el = previewRef.current;
+    if (!el) return;
+    const block = (e) => { if (e.touches?.length === 1) e.preventDefault(); };
+    el.addEventListener("touchmove", block, { passive: false });
+    return () => el.removeEventListener("touchmove", block);
+  }, [previewRef]);
 
   const ingredientes = form.ingredientes
     ? form.ingredientes.split("\n").map(s => s.trim()).filter(Boolean)
