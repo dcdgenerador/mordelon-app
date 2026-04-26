@@ -1,0 +1,24 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: #0e0e0e;
+  color: #eee;
+  font-family: 'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+input[type="range"] {
+  cursor: pointer;
+}
+
+button {
+  cursor: pointer;
+}
+
+textarea {
+  font-family: monospace;
+}
