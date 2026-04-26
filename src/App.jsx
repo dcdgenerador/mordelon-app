@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { toPng } from "html-to-image";
 
 // ─── PRESETS ─────────────────────────────────────────────────────────────────
@@ -71,7 +71,6 @@ const PRESETS = {
   },
 };
 
-// ─── PALETTES ─────────────────────────────────────────────────────────────────
 const PALETTES = {
   clasica: { dorado: "#C8991A", fuego: "#DC5014", gris: "#888", whiteDim: "#C8C8C8", turquesa: "#2AB7B7" },
   noche:   { dorado: "#FFFFFF", fuego: "#2AB7B7", gris: "#777", whiteDim: "#B4B4B4", turquesa: "#2AB7B7" },
@@ -80,21 +79,145 @@ const PALETTES = {
 
 const PRESET_KEYS = Object.keys(PRESETS);
 const PRESET_LABELS = {
-  lunes: "Lunes", martes: "Martes", miercoles: "Miércoles", jueves: "Jueves",
-  viernes: "Viernes", sabado: "Sábado", domingo: "Domingo",
-  promo: "Promo", smash: "Smash", combo: "Combo",
+  lunes:"Lunes", martes:"Martes", miercoles:"Miércoles", jueves:"Jueves",
+  viernes:"Viernes", sabado:"Sábado", domingo:"Domingo",
+  promo:"Promo", smash:"Smash", combo:"Combo",
 };
 
+// Tamaños de fuente por defecto para cada campo (en px, sobre preview de 360px)
+const DEFAULT_SIZES = {
+  linea1: 13, linea2: 36, separador: 10,
+  titulo: 16, precio: 24,
+  ingredientes: 9, valido: 8,
+  cta1: 17, cta2: 17, cta3: 17,
+  footer1: 15, footer2: 8,
+};
+
+// Posiciones iniciales de cada bloque en el preview (en %, relativo al contenedor)
+const DEFAULT_POSITIONS = {
+  linea1:      { x: 50, y: 5 },
+  linea2:      { x: 50, y: 10 },
+  separador:   { x: 50, y: 22 },
+  titulo:      { x: 50, y: 40 },
+  precio:      { x: 50, y: 48 },
+  ingredientes:{ x: 50, y: 57 },
+  valido:      { x: 50, y: 67 },
+  cta1:        { x: 50, y: 72 },
+  cta2:        { x: 50, y: 79 },
+  cta3:        { x: 50, y: 86 },
+  footer1:     { x: 50, y: 92 },
+  footer2:     { x: 50, y: 96 },
+};
+
+// ─── DRAGGABLE TEXT en el preview ────────────────────────────────────────────
+function DraggableText({ id, text, fontSize, color, bold, positions, setPositions, containerRef }) {
+  const dragging = useRef(false);
+  const offset = useRef({ x: 0, y: 0 });
+  const elRef = useRef();
+
+  const getXY = () => positions[id] || DEFAULT_POSITIONS[id] || { x: 50, y: 50 };
+
+  const startDrag = (clientX, clientY) => {
+    if (!containerRef.current || !elRef.current) return;
+    dragging.current = true;
+    const rect = containerRef.current.getBoundingClientRect();
+    const elRect = elRef.current.getBoundingClientRect();
+    // offset from element center
+    offset.current = {
+      x: clientX - (elRect.left + elRect.width / 2 - rect.left),
+      y: clientY - (elRect.top + elRect.height / 2 - rect.top),
+    };
+  };
+
+  const moveDrag = useCallback((clientX, clientY) => {
+    if (!dragging.current || !containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = ((clientX - rect.left - offset.current.x) / rect.width) * 100;
+    const y = ((clientY - rect.top - offset.current.y) / rect.height) * 100;
+    setPositions(p => ({
+      ...p,
+      [id]: {
+        x: Math.max(0, Math.min(100, x)),
+        y: Math.max(0, Math.min(100, y)),
+      }
+    }));
+  }, [id, setPositions, containerRef]);
+
+  const stopDrag = () => { dragging.current = false; };
+
+  useEffect(() => {
+    const onMouseMove = (e) => moveDrag(e.clientX, e.clientY);
+    const onTouchMove = (e) => {
+      if (!dragging.current) return;
+      e.preventDefault();
+      moveDrag(e.touches[0].clientX, e.touches[0].clientY);
+    };
+    const onUp = () => stopDrag();
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onUp);
+    window.addEventListener("touchmove", onTouchMove, { passive: false });
+    window.addEventListener("touchend", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("touchend", onUp);
+    };
+  }, [moveDrag]);
+
+  if (!text) return null;
+  const { x, y } = getXY();
+
+  return (
+    <div
+      ref={elRef}
+      onMouseDown={(e) => { e.preventDefault(); startDrag(e.clientX, e.clientY); }}
+      onTouchStart={(e) => { startDrag(e.touches[0].clientX, e.touches[0].clientY); }}
+      style={{
+        position: "absolute",
+        left: `${x}%`,
+        top: `${y}%`,
+        transform: "translate(-50%, -50%)",
+        cursor: "grab",
+        userSelect: "none",
+        whiteSpace: "nowrap",
+        color,
+        fontSize,
+        fontWeight: bold ? 900 : 400,
+        fontFamily: "'Arial Black', 'Impact', sans-serif",
+        letterSpacing: 1,
+        textShadow: "0 1px 4px rgba(0,0,0,0.7)",
+        touchAction: "none",
+        zIndex: 10,
+      }}
+    >
+      {text}
+    </div>
+  );
+}
+
 // ─── CANVAS PREVIEW ───────────────────────────────────────────────────────────
-function CanvasPreview({ form, image, logo, format, darkness, showIng, showValido, paleta, previewRef }) {
+function CanvasPreview({ form, image, logo, format, darkness, showIng, showValido, paleta, previewRef, sizes, positions, setPositions }) {
   const isStory = format === "story";
   const W = 360;
   const H = isStory ? 640 : 360;
   const pal = PALETTES[paleta] || PALETTES.clasica;
+  const containerRef = previewRef;
 
   const ingredientes = form.ingredientes
     ? form.ingredientes.split("\n").map(s => s.trim()).filter(Boolean)
     : [];
+
+  const dt = (id, text, color, bold) => (
+    <DraggableText
+      key={id} id={id} text={text}
+      fontSize={sizes[id] || DEFAULT_SIZES[id]}
+      color={color} bold={bold}
+      positions={positions} setPositions={setPositions}
+      containerRef={containerRef}
+    />
+  );
 
   return (
     <div
@@ -103,7 +226,6 @@ function CanvasPreview({ form, image, logo, format, darkness, showIng, showValid
         width: W, height: H,
         position: "relative", overflow: "hidden",
         borderRadius: 8, flexShrink: 0,
-        fontFamily: "'Arial Black', 'Impact', sans-serif",
         background: "#111",
       }}
     >
@@ -112,119 +234,115 @@ function CanvasPreview({ form, image, logo, format, darkness, showIng, showValid
           position: "absolute", inset: 0,
           width: "100%", height: "100%",
           objectFit: "cover", objectPosition: "center",
+          pointerEvents: "none",
         }} />
       )}
 
-      <div style={{
-        position: "absolute", inset: 0,
-        background: `rgba(0,0,0,${darkness})`,
-      }} />
-      <div style={{
-        position: "absolute", top: 0, left: 0, right: 0, height: "55%",
-        background: "linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 100%)",
-      }} />
-      <div style={{
-        position: "absolute", bottom: 0, left: 0, right: 0, height: "55%",
-        background: "linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 100%)",
-      }} />
+      {/* Overlays */}
+      <div style={{ position: "absolute", inset: 0, background: `rgba(0,0,0,${darkness})`, pointerEvents: "none" }} />
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "55%", background: "linear-gradient(to bottom, rgba(0,0,0,0.65) 0%, transparent 100%)", pointerEvents: "none" }} />
+      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "55%", background: "linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 100%)", pointerEvents: "none" }} />
 
-      {/* Barra turquesa lateral */}
-      <div style={{
-        position: "absolute", left: 22, top: 44, width: 3,
-        height: isStory ? 95 : 72,
-        background: pal.turquesa, borderRadius: 2,
-      }} />
+      {/* Barra turquesa */}
+      <div style={{ position: "absolute", left: 22, top: 44, width: 3, height: isStory ? 90 : 65, background: pal.turquesa, borderRadius: 2, pointerEvents: "none" }} />
 
+      {/* Líneas decorativas */}
+      <div style={{ position: "absolute", left: "10%", right: "10%", top: "27%", height: 1.5, background: pal.dorado, pointerEvents: "none" }} />
+      <div style={{ position: "absolute", left: "10%", right: "10%", top: "63%", height: 1.5, background: pal.turquesa, pointerEvents: "none" }} />
+
+      {/* Textos arrastrables */}
+      {dt("linea1",    form.linea1,    pal.gris,     false)}
+      {dt("linea2",    form.linea2,    pal.turquesa, true)}
+      {dt("separador", form.separador, "#bbb",       false)}
+      {dt("titulo",    form.titulo,    pal.fuego,    true)}
+      {dt("precio",    form.precio,    pal.dorado,   true)}
+      {showIng && ingredientes.map((ing, i) => (
+        <DraggableText
+          key={`ing-${i}`} id={`ing-${i}`} text={ing}
+          fontSize={sizes.ingredientes || DEFAULT_SIZES.ingredientes}
+          color="#bbb" bold={false}
+          positions={positions} setPositions={setPositions}
+          containerRef={containerRef}
+        />
+      ))}
+      {showValido && dt("valido", form.valido, "#aaa", false)}
+      {dt("cta1", form.cta1, "#fff",      true)}
+      {dt("cta2", form.cta2, "#fff",      true)}
+      {dt("cta3", form.cta3, pal.turquesa, true)}
+      {dt("footer1", "MORDELÓN",        pal.turquesa, true)}
+      {dt("footer2", "DEL FUEGO AL PAN", pal.gris,    false)}
+
+      {logo && (
+        <img src={logo} alt="logo" style={{
+          position: "absolute", bottom: 12, left: 16,
+          height: isStory ? 32 : 24, objectFit: "contain",
+          pointerEvents: "none",
+        }} />
+      )}
+
+      {/* Hint de arrastre */}
       <div style={{
-        position: "absolute", inset: 0,
-        display: "flex", flexDirection: "column",
-        justifyContent: "space-between",
-        padding: isStory ? "20px 28px 18px" : "14px 22px 14px",
-        color: "#fff", textAlign: "center",
+        position: "absolute", top: 6, right: 8,
+        fontSize: 9, color: "rgba(255,255,255,0.35)",
+        pointerEvents: "none",
       }}>
-        {/* TOP */}
-        <div>
-          <p style={{ margin: 0, fontSize: isStory ? 13 : 10, color: pal.gris, letterSpacing: 2, fontWeight: 400 }}>
-            {form.linea1}
-          </p>
-          <p style={{ margin: "2px 0 4px", fontSize: isStory ? 36 : 27, color: pal.turquesa, fontWeight: 900, letterSpacing: 1 }}>
-            {form.linea2}
-          </p>
-          <div style={{ height: 1.5, background: pal.dorado, margin: "4px 0" }} />
-          <p style={{ margin: 0, fontSize: isStory ? 10 : 8, color: "#bbb", letterSpacing: 1.5 }}>
-            {form.separador}
-          </p>
-        </div>
-
-        {/* MIDDLE */}
-        <div>
-          <p style={{ margin: "0 0 2px", fontSize: isStory ? 16 : 12, color: pal.fuego, fontWeight: 900, letterSpacing: 1 }}>
-            {form.titulo}
-          </p>
-          <p style={{ margin: 0, fontSize: isStory ? 24 : 18, color: pal.dorado, fontWeight: 900 }}>
-            {form.precio}
-          </p>
-          {showIng && ingredientes.length > 0 && (
-            <>
-              <div style={{ height: 1, background: "#333", margin: "5px 0" }} />
-              {ingredientes.map((ing, i) => (
-                <p key={i} style={{ margin: "1px 0", fontSize: isStory ? 9 : 7, color: "#bbb", textAlign: "left", paddingLeft: 10 }}>
-                  {ing}
-                </p>
-              ))}
-            </>
-          )}
-        </div>
-
-        {/* BOTTOM */}
-        <div style={{ position: "relative" }}>
-          <div style={{ height: 1.5, background: pal.turquesa, margin: "4px 0 6px" }} />
-          {showValido && form.valido && (
-            <p style={{ margin: "0 0 3px", fontSize: isStory ? 8 : 6, color: "#aaa", letterSpacing: 1 }}>
-              {form.valido}
-            </p>
-          )}
-          <p style={{ margin: 0, fontSize: isStory ? 17 : 13, color: "#fff", fontWeight: 900 }}>{form.cta1}</p>
-          <p style={{ margin: 0, fontSize: isStory ? 17 : 13, color: "#fff", fontWeight: 900 }}>{form.cta2}</p>
-          <p style={{ margin: "1px 0 6px", fontSize: isStory ? 17 : 13, color: pal.turquesa, fontWeight: 900 }}>{form.cta3}</p>
-          <div style={{ height: 1, background: "#333", margin: "4px 0 5px" }} />
-          <p style={{ margin: 0, fontSize: isStory ? 15 : 11, color: pal.turquesa, fontWeight: 900 }}>MORDELÓN</p>
-          <p style={{ margin: 0, fontSize: isStory ? 8 : 6, color: pal.gris, letterSpacing: 1 }}>DEL FUEGO AL PAN</p>
-
-          {logo && (
-            <img src={logo} alt="logo" style={{
-              position: "absolute",
-              bottom: isStory ? 0 : 0,
-              left: 0,
-              height: isStory ? 32 : 24,
-              objectFit: "contain",
-            }} />
-          )}
-        </div>
+        ✥ arrastrá los textos
       </div>
     </div>
   );
 }
 
-// ─── FIELD ────────────────────────────────────────────────────────────────────
-function Field({ label, value, onChange, multiline }) {
+// ─── FIELD CON SLIDER DE TAMAÑO ───────────────────────────────────────────────
+function Field({ label, fieldKey, value, onChange, multiline, sizes, setSizes }) {
   const base = {
     width: "100%", boxSizing: "border-box",
     background: "#1a1a1a", border: "1px solid #2e2e2e",
     borderRadius: 6, color: "#eee",
     padding: "7px 10px", fontSize: 13,
     fontFamily: "monospace",
-    resize: multiline ? "vertical" : "none",
-    outline: "none",
+    resize: "none", outline: "none",
   };
+
+  const handleKey = (e) => {
+    // Evitar que el textarea dispare scroll en mobile
+    e.stopPropagation();
+  };
+
   return (
-    <div style={{ marginBottom: 10 }}>
-      <label style={{ fontSize: 11, color: "#666", display: "block", marginBottom: 3, letterSpacing: 0.5, textTransform: "uppercase" }}>
-        {label}
-      </label>
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
+        <label style={{ fontSize: 11, color: "#666", letterSpacing: 0.5, textTransform: "uppercase" }}>
+          {label}
+        </label>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: 10, color: "#555" }}>tamaño</span>
+          <input
+            type="range" min="6" max="60" step="1"
+            value={sizes[fieldKey] || DEFAULT_SIZES[fieldKey] || 14}
+            onChange={e => setSizes(s => ({ ...s, [fieldKey]: parseInt(e.target.value) }))}
+            style={{ width: 70, accentColor: "#2AB7B7", cursor: "pointer" }}
+          />
+          <span style={{ fontSize: 10, color: "#888", minWidth: 22 }}>
+            {sizes[fieldKey] || DEFAULT_SIZES[fieldKey]}
+          </span>
+        </div>
+      </div>
       {multiline
-        ? <textarea rows={3} value={value} onChange={e => onChange(e.target.value.toUpperCase())} style={base} />
-        : <input value={value} onChange={e => onChange(e.target.value.toUpperCase())} style={base} />
+        ? (
+          <textarea
+            rows={3} value={value}
+            onChange={e => onChange(e.target.value.toUpperCase())}
+            onKeyDown={handleKey}
+            style={base}
+          />
+        )
+        : (
+          <input
+            value={value}
+            onChange={e => onChange(e.target.value.toUpperCase())}
+            style={base}
+          />
+        )
       }
     </div>
   );
@@ -235,15 +353,12 @@ function Toggle({ label, value, onChange }) {
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
       <span style={{ fontSize: 13, color: "#aaa" }}>{label}</span>
-      <div
-        onClick={() => onChange(!value)}
-        style={{
-          width: 40, height: 22, borderRadius: 11,
-          background: value ? "#2AB7B7" : "#333",
-          position: "relative", cursor: "pointer",
-          transition: "background .2s", flexShrink: 0,
-        }}
-      >
+      <div onClick={() => onChange(!value)} style={{
+        width: 40, height: 22, borderRadius: 11,
+        background: value ? "#2AB7B7" : "#333",
+        position: "relative", cursor: "pointer",
+        transition: "background .2s", flexShrink: 0,
+      }}>
         <div style={{
           position: "absolute", top: 3,
           left: value ? 21 : 3, width: 16, height: 16,
@@ -255,7 +370,6 @@ function Toggle({ label, value, onChange }) {
   );
 }
 
-// ─── UPLOAD BUTTON ────────────────────────────────────────────────────────────
 function UploadBtn({ label, onChange, active }) {
   return (
     <label style={{
@@ -263,8 +377,7 @@ function UploadBtn({ label, onChange, active }) {
       background: active ? "#1e2e2e" : "#1a1a1a",
       border: `1px dashed ${active ? "#2AB7B7" : "#333"}`,
       borderRadius: 6, color: active ? "#2AB7B7" : "#666",
-      fontSize: 12, textAlign: "center", cursor: "pointer",
-      marginBottom: 8,
+      fontSize: 12, textAlign: "center", cursor: "pointer", marginBottom: 8,
     }}>
       {label}
       <input type="file" accept="image/*" onChange={onChange} style={{ display: "none" }} />
@@ -272,7 +385,6 @@ function UploadBtn({ label, onChange, active }) {
   );
 }
 
-// ─── CHIP ─────────────────────────────────────────────────────────────────────
 function Chip({ label, active, onClick }) {
   return (
     <button onClick={onClick} style={{
@@ -288,12 +400,10 @@ function Chip({ label, active, onClick }) {
   );
 }
 
-// ─── BTN ──────────────────────────────────────────────────────────────────────
-function Btn({ label, active, onClick, full }) {
+function Btn({ label, active, onClick }) {
   return (
     <button onClick={onClick} style={{
-      flex: 1, width: full ? "100%" : undefined,
-      padding: "8px 0", borderRadius: 6, fontSize: 13,
+      flex: 1, padding: "8px 0", borderRadius: 6, fontSize: 13,
       background: active ? "#2AB7B7" : "#1a1a1a",
       color: active ? "#000" : "#666",
       border: `1px solid ${active ? "#2AB7B7" : "#2e2e2e"}`,
@@ -305,19 +415,13 @@ function Btn({ label, active, onClick, full }) {
   );
 }
 
-// ─── SECTION ──────────────────────────────────────────────────────────────────
 function Section({ title, children }) {
   return (
     <div style={{
       marginBottom: 12, background: "#161616",
-      borderRadius: 8, border: "1px solid #222",
-      padding: "12px 14px",
+      borderRadius: 8, border: "1px solid #222", padding: "12px 14px",
     }}>
-      {title && (
-        <p style={{ fontSize: 10, color: "#555", letterSpacing: 2, textTransform: "uppercase", marginBottom: 10 }}>
-          {title}
-        </p>
-      )}
+      {title && <p style={{ fontSize: 10, color: "#555", letterSpacing: 2, textTransform: "uppercase", marginBottom: 10 }}>{title}</p>}
       {children}
     </div>
   );
@@ -335,6 +439,8 @@ export default function App() {
   const [paleta, setPaleta] = useState("clasica");
   const [activeTab, setActiveTab] = useState("controles");
   const [downloading, setDownloading] = useState(false);
+  const [sizes, setSizes] = useState({ ...DEFAULT_SIZES });
+  const [positions, setPositions] = useState({ ...DEFAULT_POSITIONS });
 
   const previewRef = useRef();
 
@@ -348,11 +454,12 @@ export default function App() {
     const f = e.target.files[0];
     if (f) setImage(URL.createObjectURL(f));
   };
-
   const handleLogo = (e) => {
     const f = e.target.files[0];
     if (f) setLogo(URL.createObjectURL(f));
   };
+
+  const resetPositions = () => setPositions({ ...DEFAULT_POSITIONS });
 
   const downloadHD = useCallback(async () => {
     if (!previewRef.current) return;
@@ -374,6 +481,13 @@ export default function App() {
     }
   }, [format]);
 
+  const fieldProps = (label, key, multiline) => ({
+    label, fieldKey: key, multiline,
+    value: form[key],
+    onChange: v => set(key, v),
+    sizes, setSizes,
+  });
+
   const ControlsPanel = () => (
     <div style={{ padding: "16px 16px 32px", overflowY: "auto" }}>
 
@@ -381,7 +495,7 @@ export default function App() {
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
           {PRESET_KEYS.map(k => (
             <Chip key={k} label={PRESET_LABELS[k]} active={currentPreset === k}
-              onClick={() => setForm(PRESETS[k])} />
+              onClick={() => { setForm(PRESETS[k]); setPositions({ ...DEFAULT_POSITIONS }); }} />
           ))}
         </div>
       </Section>
@@ -389,7 +503,7 @@ export default function App() {
       <Section title="Formato">
         <div style={{ display: "flex", gap: 8 }}>
           <Btn label="📱 Story" active={format === "story"} onClick={() => setFormat("story")} />
-          <Btn label="🖼 Post" active={format === "post"} onClick={() => setFormat("post")} />
+          <Btn label="🖼 Post"  active={format === "post"}  onClick={() => setFormat("post")} />
         </div>
       </Section>
 
@@ -403,19 +517,10 @@ export default function App() {
       </Section>
 
       <Section title="Imágenes">
-        <UploadBtn
-          label={image ? "✅ Cambiar foto de fondo" : "📷 Subir foto de fondo"}
-          onChange={handleImage} active={!!image}
-        />
-        <UploadBtn
-          label={logo ? "✅ Cambiar logo" : "🏷 Subir logo (opcional)"}
-          onChange={handleLogo} active={!!logo}
-        />
+        <UploadBtn label={image ? "✅ Cambiar foto de fondo" : "📷 Subir foto de fondo"} onChange={handleImage} active={!!image} />
+        <UploadBtn label={logo  ? "✅ Cambiar logo"         : "🏷 Subir logo (opcional)"} onChange={handleLogo}  active={!!logo} />
         {logo && (
-          <button onClick={() => setLogo(null)} style={{
-            fontSize: 11, color: "#e05050", background: "none",
-            border: "none", cursor: "pointer", padding: 0,
-          }}>
+          <button onClick={() => setLogo(null)} style={{ fontSize: 11, color: "#e05050", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
             ✕ Quitar logo
           </button>
         )}
@@ -423,37 +528,46 @@ export default function App() {
 
       <Section title="Oscuridad de la foto">
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <input
-            type="range" min="0" max="0.9" step="0.05"
-            value={darkness}
+          <input type="range" min="0" max="0.9" step="0.05" value={darkness}
             onChange={e => setDarkness(parseFloat(e.target.value))}
-            style={{ flex: 1, accentColor: "#2AB7B7" }}
-          />
+            style={{ flex: 1, accentColor: "#2AB7B7" }} />
           <span style={{ fontSize: 12, color: "#888", minWidth: 36, textAlign: "right" }}>
             {Math.round(darkness * 100)}%
           </span>
         </div>
       </Section>
 
-      <Section title="Textos principales">
-        <Field label="Línea 1" value={form.linea1} onChange={v => set("linea1", v)} />
-        <Field label="Línea 2 (grande)" value={form.linea2} onChange={v => set("linea2", v)} />
-        <Field label="Separador" value={form.separador} onChange={v => set("separador", v)} />
-        <Field label="Título" value={form.titulo} onChange={v => set("titulo", v)} />
-        <Field label="Precio / Subtítulo" value={form.precio} onChange={v => set("precio", v)} />
-        <Field label="CTA 1" value={form.cta1} onChange={v => set("cta1", v)} />
-        <Field label="CTA 2" value={form.cta2} onChange={v => set("cta2", v)} />
-        <Field label="CTA 3 (turquesa)" value={form.cta3} onChange={v => set("cta3", v)} />
+      <Section title="Textos y tamaños">
+        <Field {...fieldProps("Línea 1", "linea1")} />
+        <Field {...fieldProps("Línea 2 (grande)", "linea2")} />
+        <Field {...fieldProps("Separador", "separador")} />
+        <Field {...fieldProps("Título", "titulo")} />
+        <Field {...fieldProps("Precio / Subtítulo", "precio")} />
+        <Field {...fieldProps("CTA 1", "cta1")} />
+        <Field {...fieldProps("CTA 2", "cta2")} />
+        <Field {...fieldProps("CTA 3 (turquesa)", "cta3")} />
       </Section>
 
       <Section title="Extras">
         <Toggle label="Mostrar ingredientes" value={showIng} onChange={setShowIng} />
-        <Field label="Ingredientes (uno por línea)" value={form.ingredientes}
-          onChange={v => set("ingredientes", v)} multiline />
+        <Field {...fieldProps("Ingredientes (uno por línea)", "ingredientes", true)} />
         <div style={{ marginTop: 8 }}>
           <Toggle label="Mostrar válido hasta" value={showValido} onChange={setShowValido} />
-          <Field label="Texto válido hasta" value={form.valido} onChange={v => set("valido", v)} />
+          <Field {...fieldProps("Texto válido hasta", "valido")} />
         </div>
+      </Section>
+
+      <Section title="Posición de textos">
+        <button onClick={resetPositions} style={{
+          width: "100%", padding: "8px 0",
+          background: "#1a1a1a", border: "1px solid #333",
+          borderRadius: 6, color: "#888", fontSize: 12, cursor: "pointer",
+        }}>
+          ↺ Resetear posiciones al default
+        </button>
+        <p style={{ fontSize: 10, color: "#444", marginTop: 6, textAlign: "center" }}>
+          Hacé click y arrastrá cualquier texto en el preview
+        </p>
       </Section>
 
       <button onClick={downloadHD} disabled={downloading} style={{
@@ -481,6 +595,7 @@ export default function App() {
         format={format} darkness={darkness}
         showIng={showIng} showValido={showValido}
         paleta={paleta} previewRef={previewRef}
+        sizes={sizes} positions={positions} setPositions={setPositions}
       />
       <p style={{ fontSize: 10, color: "#444", letterSpacing: 2, marginTop: 12 }}>
         PREVIEW · {format === "story" ? "1080×1920" : "1080×1080"}
@@ -498,20 +613,14 @@ export default function App() {
         display: "flex", alignItems: "center", justifyContent: "space-between",
       }}>
         <div>
-          <div style={{
-            fontSize: 20, fontWeight: 900, color: "#2AB7B7",
-            letterSpacing: 1, fontFamily: "'Arial Black', sans-serif",
-          }}>
+          <div style={{ fontSize: 20, fontWeight: 900, color: "#2AB7B7", letterSpacing: 1, fontFamily: "'Arial Black', sans-serif" }}>
             MORDELÓN
           </div>
-          <div style={{ fontSize: 10, color: "#555", letterSpacing: 2 }}>
-            GENERADOR DE HISTORIAS
-          </div>
+          <div style={{ fontSize: 10, color: "#555", letterSpacing: 2 }}>GENERADOR DE HISTORIAS</div>
         </div>
         <button onClick={downloadHD} disabled={downloading} style={{
           background: "#2AB7B7", color: "#000", border: "none",
-          borderRadius: 6, padding: "8px 18px",
-          fontWeight: 900, fontSize: 13, cursor: "pointer",
+          borderRadius: 6, padding: "8px 18px", fontWeight: 900, fontSize: 13, cursor: "pointer",
         }}>
           ⬇ HD
         </button>
@@ -524,39 +633,23 @@ export default function App() {
         .desk { display: none; }
         @media (min-width: 768px) {
           .mob-tabs, .mob-ctrl, .mob-prev { display: none !important; }
-          .desk {
-            display: flex;
-            height: calc(100vh - 57px);
-          }
-          .desk-ctrl {
-            width: 400px; min-width: 320px;
-            overflow-y: auto;
-            border-right: 1px solid #1e1e1e;
-            height: 100%;
-          }
-          .desk-prev {
-            flex: 1;
-            display: flex; align-items: center; justify-content: center;
-            background: #0a0a0a;
-          }
+          .desk { display: flex; height: calc(100vh - 57px); }
+          .desk-ctrl { width: 420px; min-width: 340px; overflow-y: auto; border-right: 1px solid #1e1e1e; height: 100%; }
+          .desk-prev { flex: 1; display: flex; align-items: center; justify-content: center; background: #0a0a0a; }
         }
       `}</style>
 
       {/* MOBILE TABS */}
-      <div className="mob-tabs" style={{
-        display: "flex", borderBottom: "1px solid #1e1e1e",
-        background: "#141414",
-      }}>
+      <div className="mob-tabs" style={{ display: "flex", borderBottom: "1px solid #1e1e1e", background: "#141414" }}>
         {["controles", "preview"].map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)} style={{
-            flex: 1, padding: "11px 0",
-            fontSize: 13, fontWeight: activeTab === tab ? 700 : 400,
+            flex: 1, padding: "11px 0", fontSize: 13,
+            fontWeight: activeTab === tab ? 700 : 400,
             color: activeTab === tab ? "#2AB7B7" : "#555",
-            borderBottom: `2px solid ${activeTab === tab ? "#2AB7B7" : "transparent"}`,
             background: "none", border: "none",
             borderBottomWidth: 2, borderBottomStyle: "solid",
             borderBottomColor: activeTab === tab ? "#2AB7B7" : "transparent",
-            cursor: "pointer", textTransform: "capitalize",
+            cursor: "pointer",
           }}>
             {tab === "controles" ? "Controles" : "Preview"}
           </button>
