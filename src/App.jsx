@@ -1,175 +1,154 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { toPng } from "html-to-image";
 
-// ─── PRESETS ─────────────────────────────────────────────────────────────────
+// ─── PRESETS ──────────────────────────────────────────────────────────────────
 const PRESETS = {
-  lunes: {
-    linea1: "LUNES EN", linea2: "MORDELÓN",
-    separador: "EL DÍA IDEAL PARA", titulo: "UN SANGUCHE DE",
-    precio: "CARNE MECHADA", ingredientes: "", valido: "",
-    cta1: "PORQUE EL LUNES", cta2: "SE BANCA CON", cta3: "MORDELÓN.",
-  },
-  martes: {
-    linea1: "MARTES EN", linea2: "MORDELÓN",
-    separador: "EL ANTÍDOTO CONTRA", titulo: "LA SEMANA",
-    precio: "LARGA", ingredientes: "", valido: "",
-    cta1: "UN MORDISCO Y", cta2: "EL MARTES YA", cta3: "NO DUELE.",
-  },
-  miercoles: {
-    linea1: "MIÉRCOLES EN", linea2: "MORDELÓN",
-    separador: "MITAD DE SEMANA", titulo: "MITAD DE",
-    precio: "HAMBRE", ingredientes: "", valido: "",
-    cta1: "LA OTRA MITAD", cta2: "LA PONÉS", cta3: "VOS.",
-  },
-  jueves: {
-    linea1: "JUEVES EN", linea2: "MORDELÓN",
-    separador: "CASI VIERNES", titulo: "MEJOR CON UN",
-    precio: "SANGUCHE", ingredientes: "", valido: "",
-    cta1: "YA FALTA POCO", cta2: "AGUANTÁ CON", cta3: "MORDELÓN.",
-  },
-  viernes: {
-    linea1: "VIERNES EN", linea2: "MORDELÓN",
-    separador: "A PARTIR DE LAS 20HS", titulo: "ARRANCA EL FIN",
-    precio: "DE SEMANA", ingredientes: "", valido: "",
-    cta1: "PEDÍ AHORA Y", cta2: "NO TE QUEDES", cta3: "CON LAS GANAS.",
-  },
-  sabado: {
-    linea1: "SÁBADO EN", linea2: "MORDELÓN",
-    separador: "A PARTIR DEL MEDIODÍA", titulo: "ARRANCA LA PROMO",
-    precio: "2 POR $20.000",
-    ingredientes: "- Carne desmechada\n- Mozzarella\n- Cebolla caramelizada",
-    valido: "VÁLIDO HASTA AGOTAR STOCK",
-    cta1: "PEDÍ AHORA Y", cta2: "NO TE QUEDES", cta3: "CON LAS GANAS.",
-  },
-  domingo: {
-    linea1: "DOMINGO EN", linea2: "MORDELÓN",
-    separador: "EL MEJOR CIERRE", titulo: "DE LA SEMANA",
-    precio: "ES UN MORDISCO", ingredientes: "", valido: "",
-    cta1: "MAÑANA ARRANCA", cta2: "TODO DE NUEVO.", cta3: "HOY MORDELÓN.",
-  },
-  promo: {
-    linea1: "HOY EN", linea2: "MORDELÓN",
-    separador: "PROMO DEL DÍA", titulo: "2 DE LA CASA",
-    precio: "POR $20.000",
-    ingredientes: "- Carne desmechada\n- Mozzarella\n- Cebolla caramelizada",
-    valido: "VÁLIDO HASTA AGOTAR STOCK",
-    cta1: "PEDÍ AHORA Y", cta2: "NO TE QUEDES", cta3: "CON LAS GANAS.",
-  },
-  smash: {
-    linea1: "HOY EN", linea2: "MORDELÓN",
-    separador: "EL CLÁSICO DE SIEMPRE", titulo: "SMASH BURGER",
-    precio: "DESDE $8.500",
-    ingredientes: "- Doble carne smash\n- Cheddar fundido\n- Pickles y mostaza",
-    valido: "",
-    cta1: "EL SABOR QUE", cta2: "NO TE PODÉS", cta3: "PERDER.",
-  },
-  combo: {
-    linea1: "HOY EN", linea2: "MORDELÓN",
-    separador: "COMBO COMPLETO", titulo: "BURGER + PAPAS",
-    precio: "+ BEBIDA", ingredientes: "", valido: "VÁLIDO HASTA AGOTAR STOCK",
-    cta1: "TODO LO QUE", cta2: "NECESITÁS EN", cta3: "UN SOLO COMBO.",
-  },
+  lunes:    { linea1:"LUNES EN",    linea2:"MORDELÓN", separador:"EL DÍA IDEAL PARA",    titulo:"UN SANGUCHE DE",  precio:"CARNE MECHADA", ingredientes:"", valido:"", cta1:"PORQUE EL LUNES", cta2:"SE BANCA CON",    cta3:"MORDELÓN." },
+  martes:   { linea1:"MARTES EN",   linea2:"MORDELÓN", separador:"EL ANTÍDOTO CONTRA",   titulo:"LA SEMANA",       precio:"LARGA",         ingredientes:"", valido:"", cta1:"UN MORDISCO Y",   cta2:"EL MARTES YA",    cta3:"NO DUELE." },
+  miercoles:{ linea1:"MIÉRCOLES EN",linea2:"MORDELÓN", separador:"MITAD DE SEMANA",      titulo:"MITAD DE",        precio:"HAMBRE",        ingredientes:"", valido:"", cta1:"LA OTRA MITAD",   cta2:"LA PONÉS",        cta3:"VOS." },
+  jueves:   { linea1:"JUEVES EN",   linea2:"MORDELÓN", separador:"CASI VIERNES",         titulo:"MEJOR CON UN",    precio:"SANGUCHE",      ingredientes:"", valido:"", cta1:"YA FALTA POCO",   cta2:"AGUANTÁ CON",     cta3:"MORDELÓN." },
+  viernes:  { linea1:"VIERNES EN",  linea2:"MORDELÓN", separador:"A PARTIR DE LAS 20HS", titulo:"ARRANCA EL FIN",  precio:"DE SEMANA",     ingredientes:"", valido:"", cta1:"PEDÍ AHORA Y",    cta2:"NO TE QUEDES",    cta3:"CON LAS GANAS." },
+  sabado:   { linea1:"SÁBADO EN",   linea2:"MORDELÓN", separador:"A PARTIR DEL MEDIODÍA",titulo:"ARRANCA LA PROMO",precio:"2 POR $20.000", ingredientes:"- Carne desmechada\n- Mozzarella\n- Cebolla caramelizada", valido:"VÁLIDO HASTA AGOTAR STOCK", cta1:"PEDÍ AHORA Y", cta2:"NO TE QUEDES", cta3:"CON LAS GANAS." },
+  domingo:  { linea1:"DOMINGO EN",  linea2:"MORDELÓN", separador:"EL MEJOR CIERRE",      titulo:"DE LA SEMANA",    precio:"ES UN MORDISCO",ingredientes:"", valido:"", cta1:"MAÑANA ARRANCA",  cta2:"TODO DE NUEVO.",  cta3:"HOY MORDELÓN." },
+  promo:    { linea1:"HOY EN",      linea2:"MORDELÓN", separador:"PROMO DEL DÍA",        titulo:"2 DE LA CASA",    precio:"POR $20.000",   ingredientes:"- Carne desmechada\n- Mozzarella\n- Cebolla caramelizada", valido:"VÁLIDO HASTA AGOTAR STOCK", cta1:"PEDÍ AHORA Y", cta2:"NO TE QUEDES", cta3:"CON LAS GANAS." },
+  smash:    { linea1:"HOY EN",      linea2:"MORDELÓN", separador:"EL CLÁSICO DE SIEMPRE",titulo:"SMASH BURGER",    precio:"DESDE $8.500",  ingredientes:"- Doble carne smash\n- Cheddar fundido\n- Pickles y mostaza", valido:"", cta1:"EL SABOR QUE", cta2:"NO TE PODÉS", cta3:"PERDER." },
+  combo:    { linea1:"HOY EN",      linea2:"MORDELÓN", separador:"COMBO COMPLETO",       titulo:"BURGER + PAPAS",  precio:"+ BEBIDA",      ingredientes:"", valido:"VÁLIDO HASTA AGOTAR STOCK", cta1:"TODO LO QUE", cta2:"NECESITÁS EN", cta3:"UN SOLO COMBO." },
 };
 
 const PALETTES = {
-  clasica: { dorado: "#C8991A", fuego: "#DC5014", gris: "#888", turquesa: "#2AB7B7" },
-  noche:   { dorado: "#FFFFFF", fuego: "#2AB7B7", gris: "#777", turquesa: "#2AB7B7" },
-  fuego:   { dorado: "#FF7800", fuego: "#C81E1E", gris: "#999", turquesa: "#2AB7B7" },
+  clasica:{ dorado:"#C8991A", fuego:"#DC5014", gris:"#888", turquesa:"#2AB7B7" },
+  noche:  { dorado:"#FFFFFF", fuego:"#2AB7B7", gris:"#777", turquesa:"#2AB7B7" },
+  fuego:  { dorado:"#FF7800", fuego:"#C81E1E", gris:"#999", turquesa:"#2AB7B7" },
 };
 
-const PRESET_KEYS = Object.keys(PRESETS);
-const PRESET_LABELS = {
-  lunes:"Lunes", martes:"Martes", miercoles:"Miércoles", jueves:"Jueves",
-  viernes:"Viernes", sabado:"Sábado", domingo:"Domingo",
-  promo:"Promo", smash:"Smash", combo:"Combo",
-};
+const PRESET_KEYS   = Object.keys(PRESETS);
+const PRESET_LABELS = { lunes:"Lunes", martes:"Martes", miercoles:"Miércoles", jueves:"Jueves", viernes:"Viernes", sabado:"Sábado", domingo:"Domingo", promo:"Promo", smash:"Smash", combo:"Combo" };
 
-const DEFAULT_SIZES = {
-  linea1:13, linea2:36, separador:10,
-  titulo:16, precio:24, ingredientes:9,
-  valido:8, cta1:17, cta2:17, cta3:17,
-};
+// Preview size (pantalla)
+const PW = 360;
+const storyH = () => 640;
+const postH  = () => 360;
 
-const makeDefaultPositions = () => ({
-  linea1:      { x:50, y:8  },
-  linea2:      { x:50, y:16 },
-  separador:   { x:50, y:27 },
-  titulo:      { x:50, y:42 },
-  precio:      { x:50, y:51 },
-  ingredientes:{ x:50, y:60 },
-  valido:      { x:50, y:68 },
-  cta1:        { x:50, y:74 },
-  cta2:        { x:50, y:81 },
-  cta3:        { x:50, y:88 },
-  footer1:     { x:50, y:93 },
-  footer2:     { x:50, y:97 },
-});
+const DEFAULT_SIZES = { linea1:13, linea2:36, separador:10, titulo:16, precio:24, ingredientes:9, valido:8, cta1:17, cta2:17, cta3:17 };
+
+// Posiciones por defecto en px, para story (640px alto)
+const makeDefaultPos = (isStory) => {
+  const H = isStory ? 640 : 360;
+  return {
+    linea1:      { x: PW/2, y: H*0.07  },
+    linea2:      { x: PW/2, y: H*0.15  },
+    separador:   { x: PW/2, y: H*0.27  },
+    titulo:      { x: PW/2, y: H*0.42  },
+    precio:      { x: PW/2, y: H*0.51  },
+    ingredientes:{ x: PW/2, y: H*0.60  },
+    valido:      { x: PW/2, y: H*0.68  },
+    cta1:        { x: PW/2, y: H*0.74  },
+    cta2:        { x: PW/2, y: H*0.81  },
+    cta3:        { x: PW/2, y: H*0.87  },
+    footer1:     { x: PW/2, y: H*0.93  },
+    footer2:     { x: PW/2, y: H*0.97  },
+  };
+};
 
 // ─── DRAGGABLE TEXT ───────────────────────────────────────────────────────────
-function DraggableText({ id, text, fontSize, color, bold, pos, onMove }) {
-  const isDragging = useRef(false);
-  const startData  = useRef({});
+// Arrastre estilo Canva: el texto sigue exactamente al puntero/dedo
+function DraggableText({ id, text, fontSize, color, bold, pos, onMove, containerRef }) {
+  const ref       = useRef();
+  const dragging  = useRef(false);
+  // offset entre el click y el centro del elemento
+  const offset    = useRef({ x: 0, y: 0 });
 
   if (!text) return null;
 
-  const startDrag = (clientX, clientY) => {
-    isDragging.current = true;
-    startData.current = { clientX, clientY, posX: pos.x, posY: pos.y };
-  };
+  const getContainerRect = () =>
+    containerRef.current ? containerRef.current.getBoundingClientRect() : null;
 
-  const doDrag = (clientX, clientY) => {
-    if (!isDragging.current) return;
-    const container = document.getElementById("preview-container");
-    if (!container) return;
-    const rect = container.getBoundingClientRect();
-    const dx = ((clientX - startData.current.clientX) / rect.width)  * 100;
-    const dy = ((clientY - startData.current.clientY) / rect.height) * 100;
-    onMove({
-      x: Math.max(2, Math.min(98, startData.current.posX + dx)),
-      y: Math.max(2, Math.min(98, startData.current.posY + dy)),
-    });
-  };
-
-  const stopDrag = () => { isDragging.current = false; };
-
+  /* ── MOUSE ── */
   const onMouseDown = (e) => {
     e.preventDefault();
-    startDrag(e.clientX, e.clientY);
-    const move = (ev) => doDrag(ev.clientX, ev.clientY);
-    const up   = ()   => { stopDrag(); window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up); };
-    window.addEventListener("mousemove", move);
-    window.addEventListener("mouseup",   up);
+    e.stopPropagation();
+    dragging.current = true;
+    const rect = getContainerRect();
+    if (!rect) return;
+    offset.current = {
+      x: e.clientX - rect.left - pos.x,
+      y: e.clientY - rect.top  - pos.y,
+    };
+
+    const onMove = (ev) => {
+      if (!dragging.current) return;
+      const r = getContainerRect();
+      if (!r) return;
+      onMove2(ev.clientX - r.left - offset.current.x,
+              ev.clientY - r.top  - offset.current.y, r);
+    };
+    const onUp = () => {
+      dragging.current = false;
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup",   onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup",   onUp);
   };
 
+  /* ── TOUCH ── */
   const onTouchStart = (e) => {
-    const t = e.touches[0];
-    startDrag(t.clientX, t.clientY);
-    const move = (ev) => { ev.preventDefault(); doDrag(ev.touches[0].clientX, ev.touches[0].clientY); };
-    const end  = ()   => { stopDrag(); window.removeEventListener("touchmove", move); window.removeEventListener("touchend", end); };
-    window.addEventListener("touchmove", move, { passive: false });
-    window.addEventListener("touchend",  end);
+    e.stopPropagation();
+    dragging.current = true;
+    const t    = e.touches[0];
+    const rect = getContainerRect();
+    if (!rect) return;
+    offset.current = {
+      x: t.clientX - rect.left - pos.x,
+      y: t.clientY - rect.top  - pos.y,
+    };
+
+    const onMove = (ev) => {
+      if (!dragging.current) return;
+      ev.preventDefault();
+      const r  = getContainerRect();
+      const tt = ev.touches[0];
+      if (!r) return;
+      onMove2(tt.clientX - r.left - offset.current.x,
+              tt.clientY - r.top  - offset.current.y, r);
+    };
+    const onEnd = () => {
+      dragging.current = false;
+      window.removeEventListener("touchmove", onMove);
+      window.removeEventListener("touchend",  onEnd);
+    };
+    window.addEventListener("touchmove", onMove, { passive: false });
+    window.addEventListener("touchend",  onEnd);
+  };
+
+  const onMove2 = (nx, ny, rect) => {
+    onMove({
+      x: Math.max(0, Math.min(rect.width,  nx)),
+      y: Math.max(0, Math.min(rect.height, ny)),
+    });
   };
 
   return (
     <div
+      ref={ref}
       onMouseDown={onMouseDown}
       onTouchStart={onTouchStart}
       style={{
-        position: "absolute",
-        left: `${pos.x}%`,
-        top:  `${pos.y}%`,
-        transform: "translate(-50%, -50%)",
-        cursor: "grab",
+        position:   "absolute",
+        left:       pos.x,
+        top:        pos.y,
+        transform:  "translate(-50%, -50%)",
+        cursor:     "grab",
         userSelect: "none",
         whiteSpace: "nowrap",
         color,
         fontSize,
         fontWeight: bold ? 900 : 400,
-        fontFamily: "'Arial Black', 'Impact', sans-serif",
+        fontFamily: "'Arial Black', Impact, sans-serif",
         letterSpacing: 1,
-        textShadow: "0 1px 6px rgba(0,0,0,0.8)",
-        touchAction: "none",
-        zIndex: 10,
+        textShadow: "0 1px 6px rgba(0,0,0,0.85)",
+        touchAction:"none",
+        zIndex: 20,
         lineHeight: 1.2,
       }}
     >
@@ -178,39 +157,45 @@ function DraggableText({ id, text, fontSize, color, bold, pos, onMove }) {
   );
 }
 
-// ─── PREVIEW ──────────────────────────────────────────────────────────────────
+// ─── CANVAS PREVIEW ───────────────────────────────────────────────────────────
 function CanvasPreview({ form, image, logo, format, darkness, showIng, showValido, paleta, previewRef, sizes, positions, setPositions }) {
   const isStory = format === "story";
-  const pal = PALETTES[paleta] || PALETTES.clasica;
+  const H       = isStory ? storyH() : postH();
+  const pal     = PALETTES[paleta] || PALETTES.clasica;
 
   const ingredientes = form.ingredientes
     ? form.ingredientes.split("\n").map(s => s.trim()).filter(Boolean)
     : [];
 
-  const move = (id) => (newPos) => setPositions(p => ({ ...p, [id]: newPos }));
-  const def  = makeDefaultPositions();
+  const move = (id) => (newPos) =>
+    setPositions(p => ({ ...p, [id]: newPos }));
 
-  const dt = (id, text, color, bold) => (
-    <DraggableText key={id} id={id} text={text}
-      fontSize={`${sizes[id] || DEFAULT_SIZES[id] || 14}px`}
-      color={color} bold={bold}
-      pos={positions[id] || def[id]}
-      onMove={move(id)}
-    />
-  );
+  const def = makeDefaultPos(isStory);
+
+  const dt = (id, text, color, bold) =>
+    text ? (
+      <DraggableText key={id} id={id} text={text}
+        fontSize={`${sizes[id] || DEFAULT_SIZES[id] || 14}px`}
+        color={color} bold={bold}
+        pos={positions[id] || def[id]}
+        onMove={move(id)}
+        containerRef={previewRef}
+      />
+    ) : null;
 
   return (
     <div
-      id="preview-container"
       ref={previewRef}
       style={{
-        width: 360,
-        height: isStory ? 640 : 360,
+        width: PW, height: H,
         position: "relative", overflow: "hidden",
         borderRadius: 8, flexShrink: 0,
         background: "#111",
+        // Evita scroll en touch mientras arrastrás dentro del preview
+        touchAction: "none",
       }}
     >
+      {/* Foto de fondo */}
       {image && (
         <img src={image} alt="" style={{
           position:"absolute", inset:0,
@@ -220,17 +205,20 @@ function CanvasPreview({ form, image, logo, format, darkness, showIng, showValid
         }} />
       )}
 
+      {/* Oscuridad */}
       <div style={{ position:"absolute", inset:0, background:`rgba(0,0,0,${darkness})`, pointerEvents:"none" }} />
-      <div style={{ position:"absolute", top:0, left:0, right:0, height:"50%", background:"linear-gradient(to bottom,rgba(0,0,0,0.6),transparent)", pointerEvents:"none" }} />
-      <div style={{ position:"absolute", bottom:0, left:0, right:0, height:"50%", background:"linear-gradient(to top,rgba(0,0,0,0.7),transparent)", pointerEvents:"none" }} />
+      {/* Gradientes */}
+      <div style={{ position:"absolute", top:0,    left:0, right:0, height:"45%", background:"linear-gradient(to bottom,rgba(0,0,0,0.55),transparent)", pointerEvents:"none" }} />
+      <div style={{ position:"absolute", bottom:0, left:0, right:0, height:"45%", background:"linear-gradient(to top,rgba(0,0,0,0.65),transparent)",    pointerEvents:"none" }} />
 
       {/* Barra turquesa */}
-      <div style={{ position:"absolute", left:18, top:30, width:3, height: isStory ? 85 : 60, background:pal.turquesa, borderRadius:2, pointerEvents:"none" }} />
+      <div style={{ position:"absolute", left:18, top:28, width:3, height:isStory?82:55, background:pal.turquesa, borderRadius:2, pointerEvents:"none" }} />
 
       {/* Líneas decorativas */}
-      <div style={{ position:"absolute", left:"8%", right:"8%", top:"30%", height:1.5, background:pal.dorado, pointerEvents:"none" }} />
-      <div style={{ position:"absolute", left:"8%", right:"8%", top:"66%", height:1.5, background:pal.turquesa, pointerEvents:"none" }} />
+      <div style={{ position:"absolute", left:"8%", right:"8%", top: isStory?"29%":"29%", height:1.5, background:pal.dorado,   pointerEvents:"none" }} />
+      <div style={{ position:"absolute", left:"8%", right:"8%", top: isStory?"65%":"65%", height:1.5, background:pal.turquesa, pointerEvents:"none" }} />
 
+      {/* Textos */}
       {dt("linea1",    form.linea1,    pal.gris,     false)}
       {dt("linea2",    form.linea2,    pal.turquesa, true)}
       {dt("separador", form.separador, "#bbb",       false)}
@@ -238,11 +226,12 @@ function CanvasPreview({ form, image, logo, format, darkness, showIng, showValid
       {dt("precio",    form.precio,    pal.dorado,   true)}
 
       {showIng && ingredientes.map((ing, i) => (
-        <DraggableText key={`ing-${i}`} id={`ing-${i}`} text={ing}
+        <DraggableText key={`ing${i}`} id={`ing${i}`} text={ing}
           fontSize={`${sizes.ingredientes || DEFAULT_SIZES.ingredientes}px`}
           color="#bbb" bold={false}
-          pos={positions[`ing-${i}`] || { x:30, y:60 + i*5 }}
-          onMove={move(`ing-${i}`)}
+          pos={positions[`ing${i}`] || { x: PW*0.3, y: (positions.ingredientes?.y || def.ingredientes.y) + i*14 }}
+          onMove={move(`ing${i}`)}
+          containerRef={previewRef}
         />
       ))}
 
@@ -250,17 +239,18 @@ function CanvasPreview({ form, image, logo, format, darkness, showIng, showValid
       {dt("cta1",    form.cta1,   "#fff",        true)}
       {dt("cta2",    form.cta2,   "#fff",        true)}
       {dt("cta3",    form.cta3,   pal.turquesa,  true)}
-      {dt("footer1", "MORDELÓN",          pal.turquesa, true)}
-      {dt("footer2", "DEL FUEGO AL PAN",  pal.gris,     false)}
+      {dt("footer1", "MORDELÓN",         pal.turquesa, true)}
+      {dt("footer2", "DEL FUEGO AL PAN", pal.gris,     false)}
 
       {logo && (
         <img src={logo} alt="logo" style={{
           position:"absolute", bottom:10, left:14,
-          height: isStory ? 30 : 22, objectFit:"contain", pointerEvents:"none",
+          height: isStory ? 30 : 22,
+          objectFit:"contain", pointerEvents:"none",
         }} />
       )}
 
-      <div style={{ position:"absolute", top:5, right:7, fontSize:9, color:"rgba(255,255,255,0.3)", pointerEvents:"none", fontFamily:"sans-serif" }}>
+      <div style={{ position:"absolute", top:5, right:7, fontSize:9, color:"rgba(255,255,255,0.28)", pointerEvents:"none", fontFamily:"sans-serif" }}>
         ✥ arrastrá los textos
       </div>
     </div>
@@ -269,7 +259,10 @@ function CanvasPreview({ form, image, logo, format, darkness, showIng, showValid
 
 // ─── FIELD CON SLIDER ─────────────────────────────────────────────────────────
 function Field({ label, fieldKey, value, onChange, multiline, sizes, setSizes }) {
-  const inputStyle = {
+  // Ref para evitar scroll al escribir en textarea
+  const taRef = useRef();
+
+  const base = {
     width:"100%", boxSizing:"border-box",
     background:"#1a1a1a", border:"1px solid #2e2e2e",
     borderRadius:6, color:"#eee",
@@ -298,25 +291,33 @@ function Field({ label, fieldKey, value, onChange, multiline, sizes, setSizes })
 
       {multiline ? (
         <textarea
+          ref={taRef}
           rows={3}
           value={value}
-          onChange={e => onChange(e.target.value.toUpperCase())}
-          // Evita que el foco en textarea mueva toda la página
-          onFocus={e => e.target.scrollIntoView({ block:"nearest", behavior:"smooth" })}
-          style={{ ...inputStyle, resize:"vertical" }}
+          onChange={e => {
+            // Guardar scroll actual del panel antes de actualizar
+            const panel = document.querySelector(".mob-ctrl, .desk-ctrl");
+            const scrollY = panel ? panel.scrollTop : 0;
+            onChange(e.target.value.toUpperCase());
+            // Restaurar scroll después del render
+            requestAnimationFrame(() => {
+              if (panel) panel.scrollTop = scrollY;
+            });
+          }}
+          style={{ ...base, resize:"vertical" }}
         />
       ) : (
         <input
           value={value}
           onChange={e => onChange(e.target.value.toUpperCase())}
-          style={inputStyle}
+          style={base}
         />
       )}
     </div>
   );
 }
 
-// ─── COMPONENTES MENORES ──────────────────────────────────────────────────────
+// ─── PEQUEÑOS COMPONENTES ─────────────────────────────────────────────────────
 function Toggle({ label, value, onChange }) {
   return (
     <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
@@ -356,9 +357,7 @@ function Chip({ label, active, onClick }) {
       color: active ? "#000" : "#888",
       fontWeight: active ? 700 : 400,
       cursor:"pointer", transition:"all .15s",
-    }}>
-      {label}
-    </button>
+    }}>{label}</button>
   );
 }
 
@@ -371,9 +370,7 @@ function Btn({ label, active, onClick }) {
       border:`1px solid ${active ? "#2AB7B7" : "#2e2e2e"}`,
       fontWeight: active ? 700 : 400,
       cursor:"pointer", transition:"all .15s",
-    }}>
-      {label}
-    </button>
+    }}>{label}</button>
   );
 }
 
@@ -399,10 +396,16 @@ export default function App() {
   const [activeTab, setActiveTab]   = useState("controles");
   const [downloading, setDownloading] = useState(false);
   const [sizes, setSizes]           = useState({ ...DEFAULT_SIZES });
-  const [positions, setPositions]   = useState(makeDefaultPositions());
+  const [positions, setPositions]   = useState(makeDefaultPos(true));
 
   const previewRef = useRef();
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
+
+  // Recalcular posiciones cuando cambia el formato
+  const handleFormatChange = (f) => {
+    setFormat(f);
+    setPositions(makeDefaultPos(f === "story"));
+  };
 
   const currentPreset = PRESET_KEYS.find(k => JSON.stringify(PRESETS[k]) === JSON.stringify(form));
 
@@ -415,8 +418,8 @@ export default function App() {
     try {
       const isStory = format === "story";
       const dataUrl = await toPng(previewRef.current, {
-        canvasWidth:  360 * 3,
-        canvasHeight: (isStory ? 640 : 360) * 3,
+        canvasWidth:  PW * 3,
+        canvasHeight: (isStory ? storyH() : postH()) * 3,
         pixelRatio: 3,
       });
       const a = document.createElement("a");
@@ -437,20 +440,19 @@ export default function App() {
 
   const ControlsPanel = () => (
     <div style={{ padding:"16px 16px 40px" }}>
-
       <Section title="Preset">
         <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
           {PRESET_KEYS.map(k => (
             <Chip key={k} label={PRESET_LABELS[k]} active={currentPreset===k}
-              onClick={() => { setForm(PRESETS[k]); setPositions(makeDefaultPositions()); }} />
+              onClick={() => { setForm(PRESETS[k]); setPositions(makeDefaultPos(format==="story")); }} />
           ))}
         </div>
       </Section>
 
       <Section title="Formato">
         <div style={{ display:"flex", gap:8 }}>
-          <Btn label="📱 Story" active={format==="story"} onClick={() => setFormat("story")} />
-          <Btn label="🖼 Post"  active={format==="post"}  onClick={() => setFormat("post")} />
+          <Btn label="📱 Story" active={format==="story"} onClick={() => handleFormatChange("story")} />
+          <Btn label="🖼 Post"  active={format==="post"}  onClick={() => handleFormatChange("post")} />
         </div>
       </Section>
 
@@ -465,11 +467,7 @@ export default function App() {
       <Section title="Imágenes">
         <UploadBtn label={image ? "✅ Cambiar foto de fondo" : "📷 Subir foto de fondo"} onChange={handleImage} active={!!image} />
         <UploadBtn label={logo  ? "✅ Cambiar logo"          : "🏷 Subir logo (opcional)"} onChange={handleLogo}  active={!!logo} />
-        {logo && (
-          <button onClick={() => setLogo(null)} style={{ fontSize:11, color:"#e05050", background:"none", border:"none", cursor:"pointer", padding:0 }}>
-            ✕ Quitar logo
-          </button>
-        )}
+        {logo && <button onClick={() => setLogo(null)} style={{ fontSize:11, color:"#e05050", background:"none", border:"none", cursor:"pointer", padding:0 }}>✕ Quitar logo</button>}
       </Section>
 
       <Section title="Oscuridad de la foto">
@@ -477,34 +475,32 @@ export default function App() {
           <input type="range" min="0" max="0.9" step="0.05" value={darkness}
             onChange={e => setDarkness(parseFloat(e.target.value))}
             style={{ flex:1, accentColor:"#2AB7B7" }} />
-          <span style={{ fontSize:12, color:"#888", minWidth:36, textAlign:"right" }}>
-            {Math.round(darkness*100)}%
-          </span>
+          <span style={{ fontSize:12, color:"#888", minWidth:36, textAlign:"right" }}>{Math.round(darkness*100)}%</span>
         </div>
       </Section>
 
       <Section title="Textos y tamaños">
-        <Field {...fp("Línea 1", "linea1")} />
-        <Field {...fp("Línea 2 (grande)", "linea2")} />
-        <Field {...fp("Separador", "separador")} />
-        <Field {...fp("Título", "titulo")} />
-        <Field {...fp("Precio / Subtítulo", "precio")} />
-        <Field {...fp("CTA 1", "cta1")} />
-        <Field {...fp("CTA 2", "cta2")} />
-        <Field {...fp("CTA 3 (turquesa)", "cta3")} />
+        <Field {...fp("Línea 1","linea1")} />
+        <Field {...fp("Línea 2 (grande)","linea2")} />
+        <Field {...fp("Separador","separador")} />
+        <Field {...fp("Título","titulo")} />
+        <Field {...fp("Precio / Subtítulo","precio")} />
+        <Field {...fp("CTA 1","cta1")} />
+        <Field {...fp("CTA 2","cta2")} />
+        <Field {...fp("CTA 3 (turquesa)","cta3")} />
       </Section>
 
       <Section title="Extras">
         <Toggle label="Mostrar ingredientes" value={showIng} onChange={setShowIng} />
-        <Field {...fp("Ingredientes (uno por línea)", "ingredientes", true)} />
+        <Field {...fp("Ingredientes (uno por línea)","ingredientes",true)} />
         <div style={{ marginTop:8 }}>
           <Toggle label="Mostrar válido hasta" value={showValido} onChange={setShowValido} />
-          <Field {...fp("Texto válido hasta", "valido")} />
+          <Field {...fp("Texto válido hasta","valido")} />
         </div>
       </Section>
 
       <Section title="Posiciones">
-        <button onClick={() => setPositions(makeDefaultPositions())} style={{
+        <button onClick={() => setPositions(makeDefaultPos(format==="story"))} style={{
           width:"100%", padding:"8px 0",
           background:"#1a1a1a", border:"1px solid #333",
           borderRadius:6, color:"#777", fontSize:12, cursor:"pointer",
@@ -512,7 +508,7 @@ export default function App() {
           ↺ Resetear posiciones
         </button>
         <p style={{ fontSize:10, color:"#444", marginTop:6, textAlign:"center", fontFamily:"sans-serif" }}>
-          Arrastrá cualquier texto directamente en el preview
+          Arrastrá cualquier texto en el preview
         </p>
       </Section>
 
@@ -552,39 +548,31 @@ export default function App() {
   return (
     <div style={{ minHeight:"100vh", background:"#0e0e0e", color:"#eee" }}>
 
-      <div style={{
-        background:"#141414", borderBottom:"1px solid #222",
-        padding:"12px 20px",
-        display:"flex", alignItems:"center", justifyContent:"space-between",
-      }}>
+      {/* Header */}
+      <div style={{ background:"#141414", borderBottom:"1px solid #222", padding:"12px 20px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
         <div>
-          <div style={{ fontSize:20, fontWeight:900, color:"#2AB7B7", letterSpacing:1, fontFamily:"'Arial Black', sans-serif" }}>
-            MORDELÓN
-          </div>
+          <div style={{ fontSize:20, fontWeight:900, color:"#2AB7B7", letterSpacing:1, fontFamily:"'Arial Black',sans-serif" }}>MORDELÓN</div>
           <div style={{ fontSize:10, color:"#555", letterSpacing:2 }}>GENERADOR DE HISTORIAS</div>
         </div>
-        <button onClick={downloadHD} disabled={downloading} style={{
-          background:"#2AB7B7", color:"#000", border:"none",
-          borderRadius:6, padding:"8px 18px", fontWeight:900, fontSize:13, cursor:"pointer",
-        }}>
+        <button onClick={downloadHD} disabled={downloading} style={{ background:"#2AB7B7", color:"#000", border:"none", borderRadius:6, padding:"8px 18px", fontWeight:900, fontSize:13, cursor:"pointer" }}>
           ⬇ HD
         </button>
       </div>
 
       <style>{`
-        .mob-tabs { display: flex; }
-        .mob-ctrl { display: block; overflow-y: auto; max-height: calc(100vh - 108px); }
-        .mob-prev { display: none; }
-        .desk     { display: none; }
-        @media (min-width: 768px) {
-          .mob-tabs, .mob-ctrl, .mob-prev { display: none !important; }
-          .desk      { display: flex; height: calc(100vh - 57px); }
-          .desk-ctrl { width: 420px; min-width: 340px; overflow-y: auto; border-right: 1px solid #1e1e1e; height: 100%; }
-          .desk-prev { flex: 1; display: flex; align-items: center; justify-content: center; background: #0a0a0a; }
+        .mob-tabs{display:flex;}
+        .mob-ctrl{display:block;overflow-y:auto;max-height:calc(100vh - 108px);}
+        .mob-prev{display:none;}
+        .desk{display:none;}
+        @media(min-width:768px){
+          .mob-tabs,.mob-ctrl,.mob-prev{display:none!important;}
+          .desk{display:flex;height:calc(100vh - 57px);}
+          .desk-ctrl{width:420px;min-width:340px;overflow-y:auto;border-right:1px solid #1e1e1e;height:100%;}
+          .desk-prev{flex:1;display:flex;align-items:center;justify-content:center;background:#0a0a0a;}
         }
       `}</style>
 
-      {/* MOBILE */}
+      {/* MOBILE tabs */}
       <div className="mob-tabs" style={{ display:"flex", borderBottom:"1px solid #1e1e1e", background:"#141414" }}>
         {["controles","preview"].map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)} style={{
@@ -596,7 +584,7 @@ export default function App() {
             borderBottomColor: activeTab===tab ? "#2AB7B7" : "transparent",
             cursor:"pointer",
           }}>
-            {tab === "controles" ? "Controles" : "Preview"}
+            {tab==="controles" ? "Controles" : "Preview"}
           </button>
         ))}
       </div>
@@ -604,11 +592,7 @@ export default function App() {
       <div className="mob-ctrl" style={{ display: activeTab==="controles" ? "block" : "none" }}>
         <ControlsPanel />
       </div>
-      <div className="mob-prev" style={{
-        display: activeTab==="preview" ? "flex" : "none",
-        justifyContent:"center", alignItems:"center",
-        minHeight:"calc(100vh - 108px)", background:"#0a0a0a",
-      }}>
+      <div className="mob-prev" style={{ display: activeTab==="preview" ? "flex" : "none", justifyContent:"center", alignItems:"center", minHeight:"calc(100vh - 108px)", background:"#0a0a0a" }}>
         <PreviewPanel />
       </div>
 
