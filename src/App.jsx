@@ -48,89 +48,76 @@ const makeDefaultPos = (isStory) => {
   };
 };
 
+// Expande "#abc" a "#aabbcc" para que sea válido en input type="color"
+const expandHex = (hex) => {
+  if (!hex) return "#000000";
+  const h = hex.replace("#", "");
+  if (h.length === 3) return "#" + h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+  if (h.length === 6) return "#" + h;
+  return "#000000";
+};
+
 const paletaToColors = (p) => {
   const pal = PALETTES[p] || PALETTES.clasica;
   return {
-    linea1:      pal.gris,
-    linea2:      pal.turquesa,
+    linea1:      expandHex(pal.gris),
+    linea2:      expandHex(pal.turquesa),
     separador:   "#bbbbbb",
-    titulo:      pal.fuego,
-    precio:      pal.dorado,
+    titulo:      expandHex(pal.fuego),
+    precio:      expandHex(pal.dorado),
     ingredientes:"#bbbbbb",
     valido:      "#aaaaaa",
     cta1:        "#ffffff",
     cta2:        "#ffffff",
-    cta3:        pal.turquesa,
-    footer1:     pal.turquesa,
-    footer2:     pal.gris,
+    cta3:        expandHex(pal.turquesa),
+    footer1:     expandHex(pal.turquesa),
+    footer2:     expandHex(pal.gris),
   };
 };
 
 // ─── DRAGGABLE TEXT ───────────────────────────────────────────────────────────
 function DraggableText({ text, fontSize, color, bold, pos, onMove, containerRef }) {
-  const dragging = useRef(false);
-  const offset   = useRef({ x: 0, y: 0 });
+  const elRef  = useRef();
+  const offset = useRef({ x: 0, y: 0 });
 
   if (!text) return null;
 
-  const getRect = () => containerRef.current ? containerRef.current.getBoundingClientRect() : null;
-
-  const clamp = (nx, ny, r) => onMove({
-    x: Math.max(0, Math.min(r.width,  nx)),
-    y: Math.max(0, Math.min(r.height, ny)),
-  });
-
-  const onMouseDown = (e) => {
+  const onPointerDown = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    const r = getRect();
+    const r = containerRef.current?.getBoundingClientRect();
     if (!r) return;
-    dragging.current = true;
-    offset.current = { x: e.clientX - r.left - pos.x, y: e.clientY - r.top - pos.y };
-
-    const move = (ev) => {
-      if (!dragging.current) return;
-      const r2 = getRect();
-      if (!r2) return;
-      clamp(ev.clientX - r2.left - offset.current.x, ev.clientY - r2.top - offset.current.y, r2);
+    // setPointerCapture hace que todos los pointermove/up lleguen a este elemento
+    // aunque el dedo se salga, igual que hace Canva/Instagram
+    elRef.current.setPointerCapture(e.pointerId);
+    offset.current = {
+      x: e.clientX - r.left - pos.x,
+      y: e.clientY - r.top  - pos.y,
     };
-    const up = () => {
-      dragging.current = false;
-      window.removeEventListener("mousemove", move);
-      window.removeEventListener("mouseup", up);
-    };
-    window.addEventListener("mousemove", move);
-    window.addEventListener("mouseup", up);
   };
 
-  const onTouchStart = (e) => {
+  const onPointerMove = (e) => {
+    if (!elRef.current?.hasPointerCapture(e.pointerId)) return;
     e.preventDefault();
-    e.stopPropagation();
-    const r = getRect();
+    const r = containerRef.current?.getBoundingClientRect();
     if (!r) return;
-    dragging.current = true;
-    const t = e.touches[0];
-    offset.current = { x: t.clientX - r.left - pos.x, y: t.clientY - r.top - pos.y };
+    onMove({
+      x: Math.max(0, Math.min(r.width,  e.clientX - r.left - offset.current.x)),
+      y: Math.max(0, Math.min(r.height, e.clientY - r.top  - offset.current.y)),
+    });
+  };
 
-    const move = (ev) => {
-      if (!dragging.current) return;
-      ev.preventDefault();
-      const tt = ev.touches[0];
-      clamp(tt.clientX - r.left - offset.current.x, tt.clientY - r.top - offset.current.y, r);
-    };
-    const end = () => {
-      dragging.current = false;
-      window.removeEventListener("touchmove", move);
-      window.removeEventListener("touchend", end);
-    };
-    window.addEventListener("touchmove", move, { passive: false });
-    window.addEventListener("touchend", end);
+  const onPointerUp = (e) => {
+    elRef.current?.releasePointerCapture(e.pointerId);
   };
 
   return (
     <div
-      onMouseDown={onMouseDown}
-      onTouchStart={onTouchStart}
+      ref={elRef}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
       style={{
         position: "absolute",
         left: pos.x, top: pos.y,
